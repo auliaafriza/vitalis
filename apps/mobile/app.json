@@ -1,0 +1,37 @@
+{
+  "expo": {
+    "name": "Vitalis",
+    "slug": "vitalis",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "vitalis",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0d1117"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.vitalis.app",
+      "infoPlist": {
+        "NSMotionUsageDescription": "Vitalis membaca data langkah dari perangkat untuk mengisi catatan aktivitas harianmu secara otomatis."
+      }
+    },
+    "android": {
+      "package": "com.vitalis.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#0d1117"
+      },
+      "permissions": ["android.permission.ACTIVITY_RECOGNITION"],
+      "edgeToEdgeEnabled": true
+    },
+    "plugins": ["expo-router", "expo-sensors"],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

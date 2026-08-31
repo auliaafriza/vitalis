@@ -1,0 +1,48 @@
+{
+  "name": "Vitalis — Pelacak Kesehatan & Nutrisi",
+  "short_name": "Vitalis",
+  "description": "Catat makanan, air, tidur, langkah, dan berat badan dalam satu tempat.",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0d1117",
+  "theme_color": "#0d1117",
+  "lang": "id",
+  "dir": "ltr",
+  "categories": ["health", "fitness", "lifestyle"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Catat makanan",
+      "short_name": "Makanan",
+      "url": "/nutrition",
+      "description": "Langsung ke pencatatan nutrisi"
+    },
+    {
+      "name": "Catat kesehatan",
+      "short_name": "Kesehatan",
+      "url": "/health",
+      "description": "Air, tidur, langkah, berat badan"
+    }
+  ]
+}

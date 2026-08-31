@@ -1,0 +1,27 @@
+{
+  "name": "vitalis",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Cross-platform daily health & nutrition tracker \u2014 Next.js PWA + Expo, sharing one domain core.",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build:packages": "npm run build -w @vitalis/core -w @vitalis/api",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test -w @vitalis/core",
+    "dev:web": "npm run dev -w @vitalis/web",
+    "build:web": "npm run build:packages && npm run build -w @vitalis/web",
+    "dev:mobile": "npm run start -w @vitalis/mobile",
+    "db:reset": "supabase db reset",
+    "db:types": "supabase gen types typescript --local > packages/api/src/database.types.ts",
+    "db:test": "psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f supabase/tests/rls_and_triggers.sql"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  }
+}

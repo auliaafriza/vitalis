@@ -1,0 +1,23 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    // React Native 0.87 ships two type sets. The default ("types" condition)
+    // points at types_generated, where the exported `ViewStyle`/`TextStyle`
+    // aliases do not match the component prop types they are supposed to
+    // describe — `position: "fixed"` exists in one and not the other, so every
+    // StyleSheet.create() result fails to typecheck. Resolving through the
+    // legacy condition instead gives the consistent, hand-maintained types.
+    "customConditions": ["react-native-legacy-deep-imports", "react-native"],
+    "paths": {
+      "@/*": ["./src/*"],
+      "@vitalis/core": ["../../packages/core/src/index.ts"],
+      "@vitalis/api": ["../../packages/api/src/index.ts"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"],
+  "exclude": ["node_modules"]
+}

@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Unit tests (domain logic)
+        run: npm test
+
+      - name: Typecheck every workspace
+        run: npm run typecheck
+
+      - name: Build web
+        run: npm run build -w @vitalis/web
+        env:
+          # Build-time only: the app never reaches this project, but Next needs
+          # the variables to exist so the client bundle can be produced.
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+
+      - name: Bundle mobile (Metro must resolve the shared packages)
+        run: npx expo export --platform ios --output-dir /tmp/expo-export
+        working-directory: apps/mobile
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
