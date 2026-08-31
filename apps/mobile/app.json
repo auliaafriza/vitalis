@@ -9,7 +9,7 @@
     "newArchEnabled": true,
     "icon": "./assets/icon.png",
     "splash": {
-      "image": "./assets/icon.png",
+      "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#0d1117"
     },
@@ -23,13 +23,18 @@
     "android": {
       "package": "com.vitalis.app",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/icon.png",
-        "backgroundColor": "#0d1117"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#118A7A"
       },
-      "permissions": ["android.permission.ACTIVITY_RECOGNITION"],
+      "permissions": [
+        "android.permission.ACTIVITY_RECOGNITION"
+      ],
       "edgeToEdgeEnabled": true
     },
-    "plugins": ["expo-router", "expo-sensors"],
+    "plugins": [
+      "expo-router",
+      "expo-sensors"
+    ],
     "experiments": {
       "typedRoutes": true
     }
