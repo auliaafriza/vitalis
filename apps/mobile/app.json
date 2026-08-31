@@ -18,7 +18,8 @@
       "bundleIdentifier": "com.vitalis.app",
       "infoPlist": {
         "NSMotionUsageDescription": "Vitalis membaca data langkah dari perangkat untuk mengisi catatan aktivitas harianmu secara otomatis."
-      }
+      },
+      "buildNumber": "1"
     },
     "android": {
       "package": "com.vitalis.app",
@@ -29,7 +30,8 @@
       "permissions": [
         "android.permission.ACTIVITY_RECOGNITION"
       ],
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "versionCode": 1
     },
     "plugins": [
       "expo-router",
@@ -37,6 +39,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "f1c16c9e-2695-40dc-95ed-8a1bfad2f592"
+      }
+    },
+    "owner": "auliaafriza"
   }
 }
