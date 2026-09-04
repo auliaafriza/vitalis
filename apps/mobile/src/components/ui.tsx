@@ -1,9 +1,10 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
   type StyleProp,
   type ViewStyle,
@@ -221,4 +222,96 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   errorText: { color: theme.danger, fontSize: 13 },
+
+  passwordWrap: { position: 'relative', justifyContent: 'center' },
+  passwordInput: {
+    backgroundColor: theme.bg,
+    borderColor: theme.border,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingLeft: spacing.md,
+    paddingRight: 48,
+    paddingVertical: 12,
+    color: theme.text,
+    fontSize: 15,
+  },
+  passwordToggle: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  passwordEye: { fontSize: 17 },
+  // React Native has no SVG in the core runtime, so the "hidden" state is the
+  // eye glyph with a rotated 2px View laid over it. No native dependency, and
+  // therefore no new build required to ship it.
+  passwordSlash: {
+    position: 'absolute',
+    left: -3,
+    right: -3,
+    top: '46%',
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: theme.text,
+    transform: [{ rotate: '-45deg' }],
+  },
 });
+
+/**
+ * Password field with a show/hide toggle.
+ *
+ * Visibility always starts hidden on mount — revealing a password is a
+ * deliberate act and should not be remembered between screens.
+ *
+ * autoCorrect / spellCheck are off because Android can attach the keyboard
+ * suggestion strip to a field once secureTextEntry is flipped off, which
+ * would offer to "learn" the password.
+ */
+export function PasswordInput({
+  value,
+  onChangeText,
+  placeholder = 'Minimal 8 karakter',
+  autoComplete = 'current-password',
+}: {
+  value: string;
+  onChangeText: (value: string) => void;
+  placeholder?: string;
+  autoComplete?: 'current-password' | 'new-password';
+}) {
+  const [visible, setVisible] = useState(false);
+
+  return (
+    <View style={styles.passwordWrap}>
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        secureTextEntry={!visible}
+        autoCapitalize="none"
+        autoComplete={autoComplete}
+        autoCorrect={false}
+        spellCheck={false}
+        placeholder={placeholder}
+        placeholderTextColor={theme.textDim}
+        style={styles.passwordInput}
+      />
+      <Pressable
+        onPress={() => setVisible((v) => !v)}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityState={{ selected: visible }}
+        accessibilityLabel={
+          visible ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'
+        }
+        style={styles.passwordToggle}
+      >
+        <View>
+          <Text style={styles.passwordEye}>{'\u{1F441}'}</Text>
+          {visible ? <View style={styles.passwordSlash} /> : null}
+        </View>
+      </Pressable>
+    </View>
+  );
+}

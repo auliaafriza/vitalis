@@ -3,7 +3,7 @@
 import { credentialsSchema } from '@vitalis/core';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useState } from 'react';
-import { Button, Field, inputClass } from '@/components/ui';
+import { Button, Field, inputClass, PasswordInput } from '@/components/ui';
 import { getBrowserClient } from '@/lib/supabase/client';
 
 type Mode = 'signin' | 'signup';
@@ -99,14 +99,11 @@ function LoginForm() {
           hint="Minimal 8 karakter"
           error={errors['password']}
         >
-          <input
-            type="password"
+          <PasswordInput
+            value={password}
+            onChange={setPassword}
             autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
             required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className={inputClass}
-            placeholder="••••••••"
           />
         </Field>
 

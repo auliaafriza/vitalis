@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, ErrorNote } from '../src/components/ui';
+import { Button, ErrorNote, PasswordInput } from '../src/components/ui';
 import { supabase } from '../src/lib/supabase';
 import { radius, spacing, theme } from '../src/lib/theme';
 
@@ -81,14 +81,10 @@ export default function LoginScreen() {
             />
 
             <Text style={styles.label}>Kata sandi</Text>
-            <TextInput
+            <PasswordInput
               value={password}
               onChangeText={setPassword}
-              secureTextEntry
-              autoCapitalize="none"
-              placeholder="Minimal 8 karakter"
-              placeholderTextColor={theme.textDim}
-              style={styles.input}
+              autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
             />
 
             {error != null && <ErrorNote error={error} />}

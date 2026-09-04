@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
 /** Shared presentational primitives. Deliberately small and unstyled-ish. */
 
@@ -257,6 +257,91 @@ export function ErrorNote({ error }: { error: unknown }) {
       className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200"
     >
       {message}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------
+   Password field with a show/hide toggle.
+   ---------------------------------------------------------------------- */
+
+function EyeIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"
+         stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function EyeOffIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"
+         stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 3l18 18" />
+      <path d="M10.6 10.7a3 3 0 0 0 4.2 4.2" />
+      <path d="M9.7 5.7A9.7 9.7 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a17.6 17.6 0 0 1-3.3 4.2" />
+      <path d="M6.5 6.9A17.4 17.4 0 0 0 2.5 12S6 18.5 12 18.5a9.8 9.8 0 0 0 4-.85" />
+    </svg>
+  );
+}
+
+/**
+ * A password input that can be revealed.
+ *
+ * Notes that matter:
+ *  - `type="button"` so the toggle never submits the form it lives in.
+ *  - `aria-pressed` announces the current state; the label says what the
+ *    button will DO, not what it currently shows.
+ *  - visibility always starts hidden, on every mount. Revealing a password is
+ *    a deliberate act and should not be remembered.
+ *  - onMouseDown is prevented so clicking the toggle does not steal focus
+ *    from the field the user is typing in.
+ */
+export function PasswordInput({
+  value,
+  onChange,
+  autoComplete = 'current-password',
+  placeholder = '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022',
+  required,
+  name,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  autoComplete?: string;
+  placeholder?: string;
+  required?: boolean;
+  name?: string;
+}) {
+  const [visible, setVisible] = useState(false);
+
+  return (
+    <div className="relative">
+      <input
+        type={visible ? 'text' : 'password'}
+        name={name}
+        autoComplete={autoComplete}
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
+        required={required}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className={`${inputClass} pr-12`}
+      />
+      <button
+        type="button"
+        onClick={() => setVisible((v) => !v)}
+        onMouseDown={(e) => e.preventDefault()}
+        aria-pressed={visible}
+        aria-label={visible ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'}
+        title={visible ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'}
+        className="absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-xl text-ink-500 transition-colors hover:text-ink-100"
+      >
+        {visible ? <EyeOffIcon /> : <EyeIcon />}
+      </button>
     </div>
   );
 }
