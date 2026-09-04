@@ -1,6 +1,6 @@
 'use client';
 
-import { credentialsSchema } from '@vitalis/core';
+import { credentialsSchema } from '@calorya/core';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useState } from 'react';
 import { Button, Field, inputClass, PasswordInput } from '@/components/ui';
@@ -71,7 +71,7 @@ function LoginForm() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-5 py-10">
       <header className="mb-8">
-        <p className="text-2xl font-semibold text-brand-400">Vitalis</p>
+        <p className="text-2xl font-semibold text-brand-400">Calorya</p>
         <h1 className="mt-2 text-xl font-semibold">
           {mode === 'signin' ? 'Masuk ke akunmu' : 'Buat akun baru'}
         </h1>

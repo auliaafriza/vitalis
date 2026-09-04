@@ -1,9 +1,9 @@
 'use client';
 
 import { createBrowserClient } from '@supabase/ssr';
-import type { Database, VitalisClient } from '@vitalis/api';
+import type { Database, CaloryaClient } from '@calorya/api';
 
-let cached: VitalisClient | null = null;
+let cached: CaloryaClient | null = null;
 
 /**
  * Browser-side Supabase client, created once per tab.
@@ -12,7 +12,7 @@ let cached: VitalisClient | null = null;
  * is what lets the Next.js server read it too — the same session works in
  * server components, middleware, and here.
  */
-export function getBrowserClient(): VitalisClient {
+export function getBrowserClient(): CaloryaClient {
   if (cached) return cached;
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

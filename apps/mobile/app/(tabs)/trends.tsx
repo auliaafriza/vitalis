@@ -5,7 +5,7 @@ import {
   lastNDays,
   linearTrend,
   todayKey,
-} from '@vitalis/core';
+} from '@calorya/core';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Card, EmptyState, StatTile } from '../../src/components/ui';

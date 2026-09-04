@@ -19,11 +19,12 @@ import {
   getWeightEntries,
   listFoods,
   recentFoods,
+  resolveBarcode,
   searchFoods,
   upsertSleep,
   upsertSteps,
   upsertWeight,
-} from '@vitalis/api';
+} from '@calorya/api';
 import type {
   FoodEntryInput,
   MoodEntryInput,
@@ -31,7 +32,7 @@ import type {
   StepEntryInput,
   WaterEntryInput,
   WeightEntryInput,
-} from '@vitalis/core';
+} from '@calorya/core';
 import { getBrowserClient } from './supabase/client';
 
 /**
@@ -158,6 +159,21 @@ function useDayInvalidator(day: string) {
     void client.invalidateQueries({ queryKey: qk.latestWeight });
     void client.invalidateQueries({ queryKey: qk.recentFoods });
   };
+}
+
+/**
+ * Resolve a scanned barcode: our catalogue first, then Open Food Facts.
+ * A successful import adds a private food, so the search cache is stale after.
+ */
+export function useResolveBarcode() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (barcode: string) => resolveBarcode(getBrowserClient(), barcode),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ['food-search'] });
+      void client.invalidateQueries({ queryKey: qk.recentFoods });
+    },
+  });
 }
 
 export function useAddFood(day: string) {

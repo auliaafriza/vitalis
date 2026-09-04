@@ -14,8 +14,8 @@
     "customConditions": ["react-native-legacy-deep-imports", "react-native"],
     "paths": {
       "@/*": ["./src/*"],
-      "@vitalis/core": ["../../packages/core/src/index.ts"],
-      "@vitalis/api": ["../../packages/api/src/index.ts"]
+      "@calorya/core": ["../../packages/core/src/index.ts"],
+      "@calorya/api": ["../../packages/api/src/index.ts"]
     }
   },
   "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"],

@@ -1,6 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
-import type { Database, VitalisClient } from '@vitalis/api';
+import type { Database, CaloryaClient } from '@calorya/api';
 
 /**
  * Server-side client for server components and route handlers.
@@ -9,7 +9,7 @@ import type { Database, VitalisClient } from '@vitalis/api';
  * error there; the middleware is what actually refreshes the session cookie
  * on every request.
  */
-export async function getServerClient(): Promise<VitalisClient> {
+export async function getServerClient(): Promise<CaloryaClient> {
   const cookieStore = await cookies();
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

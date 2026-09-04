@@ -1,4 +1,4 @@
-import { credentialsSchema } from '@vitalis/core';
+import { credentialsSchema } from '@calorya/core';
 import { useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -59,7 +59,7 @@ export default function LoginScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-          <Text style={styles.brand}>Vitalis</Text>
+          <Text style={styles.brand}>Calorya</Text>
           <Text style={styles.title}>
             {mode === 'signin' ? 'Masuk ke akunmu' : 'Buat akun baru'}
           </Text>

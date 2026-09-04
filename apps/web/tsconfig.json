@@ -27,10 +27,10 @@
       "@/*": [
         "./src/*"
       ],
-      "@vitalis/core": [
+      "@calorya/core": [
         "../../packages/core/src/index.ts"
       ],
-      "@vitalis/api": [
+      "@calorya/api": [
         "../../packages/api/src/index.ts"
       ]
     }

@@ -10,24 +10,25 @@ import {
   getTargetsFor,
   listFoods,
   recentFoods,
+  resolveBarcode,
   searchFoods,
   upsertSleep,
   upsertSteps,
   upsertWeight,
-} from '@vitalis/api';
+} from '@calorya/api';
 import type {
   FoodEntryInput,
   SleepEntryInput,
   StepEntryInput,
   WaterEntryInput,
   WeightEntryInput,
-} from '@vitalis/core';
+} from '@calorya/core';
 import { getClient } from './supabase';
 
 /**
  * The mobile hooks mirror the web ones deliberately: same query keys, same
  * invalidation rules, different client. Because the queries themselves live
- * in @vitalis/api, this file contains no data logic at all — only wiring.
+ * in @calorya/api, this file contains no data logic at all — only wiring.
  */
 export const qk = {
   profile: ['profile'] as const,
@@ -99,6 +100,17 @@ function useDayInvalidator(day: string) {
     void client.invalidateQueries({ queryKey: qk.foodEntries(day) });
     void client.invalidateQueries({ queryKey: qk.recentFoods });
   };
+}
+
+export function useResolveBarcode() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (barcode: string) => resolveBarcode(getClient(), barcode),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ['food-search'] });
+      void client.invalidateQueries({ queryKey: qk.recentFoods });
+    },
+  });
 }
 
 export function useAddFood(day: string) {

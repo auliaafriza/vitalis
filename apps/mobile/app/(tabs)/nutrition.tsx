@@ -1,4 +1,4 @@
-import { groupByMeal } from '@vitalis/api';
+import { groupByMeal } from '@calorya/api';
 import {
   defaultPortionG,
   formatKcal,
@@ -10,7 +10,7 @@ import {
   todayKey,
   type Food,
   type MealType,
-} from '@vitalis/core';
+} from '@calorya/core';
 import { useMemo, useState } from 'react';
 import {
   FlatList,
@@ -37,8 +37,10 @@ import {
   useFoodSearch,
   useProfile,
   useRecentFoods,
+  useResolveBarcode,
   useTargets,
 } from '../../src/lib/hooks';
+import { BarcodeScanner } from '../../src/components/barcode-scanner';
 import { radius, spacing, theme } from '../../src/lib/theme';
 
 export default function NutritionScreen() {
@@ -172,9 +174,34 @@ function FoodPickerSheet({
 }) {
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<Food | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [scanNote, setScanNote] = useState<string | null>(null);
   const { data: results } = useFoodSearch(query);
   const { data: recent } = useRecentFoods();
   const addFood = useAddFood(day);
+  const resolve = useResolveBarcode();
+
+  function handleBarcode(barcode: string) {
+    setScanNote(null);
+    resolve.mutate(barcode, {
+      onSuccess: (result) => {
+        if (result.status === 'catalogue' || result.status === 'imported') {
+          setScanning(false);
+          setSelected(result.food);
+          return;
+        }
+        setScanNote(
+          result.status === 'not_found'
+            ? 'Produk ini belum ada di database mana pun. Tambahkan manual saja.'
+            : result.status === 'unusable'
+              ? 'Produk ditemukan tapi data gizinya tidak lengkap.'
+              : result.status === 'invalid_barcode'
+                ? 'Angka barcode tidak valid.'
+                : 'Tidak ada koneksi ke database produk. Coba lagi nanti.',
+        );
+      },
+    });
+  }
 
   const list = query.trim().length === 0 && recent?.length ? recent : (results ?? []);
 
@@ -182,14 +209,35 @@ function FoodPickerSheet({
     <SafeAreaView style={styles.sheet}>
       <View style={styles.sheetHeader}>
         <Text style={styles.sheetTitle}>
-          {selected ? 'Berapa porsinya?' : `Tambah ke ${MEAL_LABEL[meal]}`}
+          {selected
+            ? 'Berapa porsinya?'
+            : scanning
+              ? 'Pindai barcode'
+              : `Tambah ke ${MEAL_LABEL[meal]}`}
         </Text>
-        <Pressable onPress={selected ? () => setSelected(null) : onClose}>
-          <Text style={styles.addLink}>{selected ? 'Kembali' : 'Tutup'}</Text>
+        <Pressable
+          onPress={
+            selected
+              ? () => setSelected(null)
+              : scanning
+                ? () => setScanning(false)
+                : onClose
+          }
+        >
+          <Text style={styles.addLink}>
+            {selected || scanning ? 'Kembali' : 'Tutup'}
+          </Text>
         </Pressable>
       </View>
 
-      {selected ? (
+      {scanning && !selected ? (
+        <BarcodeScanner
+          onDetected={handleBarcode}
+          onCancel={() => setScanning(false)}
+          busy={resolve.isPending}
+          note={scanNote}
+        />
+      ) : selected ? (
         <PortionStep
           food={selected}
           busy={addFood.isPending}
@@ -203,21 +251,42 @@ function FoodPickerSheet({
         />
       ) : (
         <>
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Cari makanan… (mis. nasi, tempe, pisang)"
-            placeholderTextColor={theme.textDim}
-            style={[styles.input, { margin: spacing.lg }]}
-            autoFocus
-          />
+          <View style={styles.searchRow}>
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Cari makanan… (mis. nasi, tempe)"
+              placeholderTextColor={theme.textDim}
+              style={[styles.input, { flex: 1 }]}
+              autoFocus
+            />
+            <Pressable
+              onPress={() => setScanning(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Pindai barcode"
+              style={styles.scanButton}
+            >
+              <Text style={{ fontSize: 18 }}>▥</Text>
+            </Pressable>
+          </View>
           <FlatList
             data={list}
             keyExtractor={(item) => item.id}
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={{ paddingHorizontal: spacing.lg }}
             ListEmptyComponent={
-              <Text style={styles.entryMeta}>Tidak ada hasil untuk “{query}”.</Text>
+              <View style={{ paddingVertical: spacing.xl, alignItems: 'center' }}>
+                <Text style={styles.entryMeta}>Tidak ada hasil untuk “{query}”.</Text>
+                <Text style={[styles.entryMeta, { textAlign: 'center' }]}>
+                  Kalau ini produk kemasan, barcode-nya biasanya lebih cepat
+                  ketemu daripada namanya.
+                </Text>
+                <Button
+                  label="Pindai barcode"
+                  onPress={() => setScanning(true)}
+                  style={{ marginTop: spacing.md, alignSelf: 'stretch' }}
+                />
+              </View>
             }
             renderItem={({ item }) => (
               <Pressable style={styles.resultRow} onPress={() => setSelected(item)}>
@@ -364,6 +433,19 @@ const styles = StyleSheet.create({
     borderBottomColor: theme.border,
   },
   sheetTitle: { color: theme.text, fontSize: 16, fontWeight: '600' },
+  searchRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    alignItems: 'center',
+    margin: spacing.lg,
+  },
+  scanButton: {
+    borderWidth: 1,
+    borderColor: theme.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 12,
+  },
   input: {
     backgroundColor: theme.surface,
     borderColor: theme.border,

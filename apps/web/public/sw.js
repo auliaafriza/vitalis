@@ -1,5 +1,5 @@
 /**
- * Vitalis service worker.
+ * Calorya service worker.
  *
  * Written by hand rather than generated, because the caching rules here are
  * the interesting part and a generated one would hide them:
@@ -13,7 +13,7 @@
  *     a stale cache, and cached auth responses are a security problem.
  */
 
-const VERSION = 'vitalis-v1';
+const VERSION = 'calorya-v2';
 const SHELL_CACHE = `${VERSION}-shell`;
 const STATIC_CACHE = `${VERSION}-static`;
 const OFFLINE_URL = '/offline';

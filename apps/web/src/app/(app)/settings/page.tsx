@@ -1,6 +1,6 @@
 'use client';
 
-import { saveTargets, updateProfile } from '@vitalis/api';
+import { saveTargets, updateProfile } from '@calorya/api';
 import {
   ACTIVITY_LABEL,
   ACTIVITY_LEVELS,
@@ -9,7 +9,7 @@ import {
   targetsSchema,
   type ActivityLevel,
   type Goal,
-} from '@vitalis/core';
+} from '@calorya/core';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';

@@ -5,7 +5,7 @@ const path = require('node:path');
  * Metro configuration for an npm-workspaces monorepo.
  *
  * Two changes are required and both are easy to get wrong:
- *   1. watchFolders must include the repo root, or edits to @vitalis/core
+ *   1. watchFolders must include the repo root, or edits to @calorya/core
  *      never trigger a reload.
  *   2. nodeModulesPaths must list the app's own node_modules *first*, so a
  *      hoisted duplicate of React can never be resolved twice — the classic

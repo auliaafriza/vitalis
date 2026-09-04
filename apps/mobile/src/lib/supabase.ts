@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
-import type { Database, VitalisClient } from '@vitalis/api';
+import type { Database, CaloryaClient } from '@calorya/api';
 import 'react-native-url-polyfill/auto';
 
 /**
@@ -20,7 +20,7 @@ if (!url || !anonKey) {
   );
 }
 
-export const supabase: VitalisClient = createClient<Database>(url, anonKey, {
+export const supabase: CaloryaClient = createClient<Database>(url, anonKey, {
   auth: {
     storage: AsyncStorage,
     autoRefreshToken: true,
@@ -29,6 +29,6 @@ export const supabase: VitalisClient = createClient<Database>(url, anonKey, {
   },
 });
 
-export function getClient(): VitalisClient {
+export function getClient(): CaloryaClient {
   return supabase;
 }

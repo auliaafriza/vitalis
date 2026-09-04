@@ -1,4 +1,4 @@
-import { todayKey } from '@vitalis/core';
+import { todayKey } from '@calorya/core';
 import { Pedometer } from 'expo-sensors';
 import { useEffect, useRef, useState } from 'react';
 import { useSaveSteps } from './hooks';

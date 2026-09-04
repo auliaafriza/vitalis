@@ -1,50 +1,52 @@
 {
   "expo": {
-    "name": "Vitalis",
-    "slug": "vitalis",
+    "name": "Calorya",
+    "slug": "calorya",
     "version": "0.1.0",
     "orientation": "portrait",
-    "scheme": "vitalis",
+    "scheme": "calorya",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "icon": "./assets/icon.png",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0d1117"
+      "backgroundColor": "#FEFDFB"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.vitalis.app",
+      "bundleIdentifier": "com.calorya.app",
       "infoPlist": {
-        "NSMotionUsageDescription": "Vitalis membaca data langkah dari perangkat untuk mengisi catatan aktivitas harianmu secara otomatis."
+        "NSMotionUsageDescription": "Calorya membaca data langkah dari perangkat untuk mengisi catatan aktivitas harianmu secara otomatis.",
+        "NSCameraUsageDescription": "Calorya memakai kamera hanya untuk membaca barcode kemasan makanan. Tidak ada foto yang disimpan atau dikirim."
       },
       "buildNumber": "1"
     },
     "android": {
-      "package": "com.vitalis.app",
+      "package": "com.calorya.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#118A7A"
+        "backgroundColor": "#FEFDFB"
       },
       "permissions": [
-        "android.permission.ACTIVITY_RECOGNITION"
+        "android.permission.ACTIVITY_RECOGNITION",
+        "android.permission.CAMERA"
       ],
       "edgeToEdgeEnabled": true,
       "versionCode": 1
     },
     "plugins": [
       "expo-router",
-      "expo-sensors"
+      "expo-sensors",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Calorya memakai kamera hanya untuk membaca barcode kemasan makanan. Tidak ada foto yang disimpan atau dikirim."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
-    },
-    "extra": {
-      "router": {},
-      "eas": {
-        "projectId": "f1c16c9e-2695-40dc-95ed-8a1bfad2f592"
-      }
     },
     "owner": "auliaafriza"
   }

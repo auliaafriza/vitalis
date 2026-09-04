@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { relativeDayLabel } from '@vitalis/core';
+import { relativeDayLabel } from '@calorya/core';
 
 const TABS = [
   { href: '/dashboard', label: 'Beranda', icon: '◎' },
@@ -23,7 +23,7 @@ export function BottomNav() {
     >
       <div className="mx-auto flex max-w-lg items-stretch md:h-full md:max-w-none md:flex-col md:gap-1 md:p-3">
         <p className="hidden px-3 py-4 text-lg font-semibold text-brand-400 md:block">
-          Vitalis
+          Calorya
         </p>
         {TABS.map((tab) => {
           const active = pathname.startsWith(tab.href);

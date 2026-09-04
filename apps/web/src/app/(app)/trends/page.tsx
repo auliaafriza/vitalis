@@ -8,7 +8,7 @@ import {
   lastNDays,
   linearTrend,
   movingAverage,
-} from '@vitalis/core';
+} from '@calorya/core';
 import { useMemo, useState } from 'react';
 import {
   Area,

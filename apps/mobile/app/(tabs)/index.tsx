@@ -9,7 +9,7 @@ import {
   relativeDayLabel,
   todayKey,
   type DaySummary,
-} from '@vitalis/core';
+} from '@calorya/core';
 import { useMemo } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Button, Card, ErrorNote, ProgressBar, StatTile } from '../../src/components/ui';

@@ -1,6 +1,6 @@
 'use client';
 
-import { groupByMeal } from '@vitalis/api';
+import { groupByMeal } from '@calorya/api';
 import {
   formatKcal,
   macroSplit,
@@ -8,7 +8,7 @@ import {
   MEAL_LABEL,
   sumNutrients,
   type MealType,
-} from '@vitalis/core';
+} from '@calorya/core';
 import { useMemo, useState } from 'react';
 import { FoodPicker } from '@/components/food-picker';
 import { DayNav } from '@/components/nav';

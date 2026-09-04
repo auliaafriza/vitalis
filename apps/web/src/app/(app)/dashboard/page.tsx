@@ -10,7 +10,7 @@ import {
   lastNDays,
   relativeDayLabel,
   type DaySummary,
-} from '@vitalis/core';
+} from '@calorya/core';
 import Link from 'next/link';
 import { useMemo } from 'react';
 import { DayNav } from '@/components/nav';

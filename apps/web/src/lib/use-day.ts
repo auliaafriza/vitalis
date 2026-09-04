@@ -1,6 +1,6 @@
 'use client';
 
-import { addDays, todayKey } from '@vitalis/core';
+import { addDays, todayKey } from '@calorya/core';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 /**

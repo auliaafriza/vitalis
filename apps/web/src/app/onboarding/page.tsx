@@ -1,6 +1,6 @@
 'use client';
 
-import { completeOnboarding } from '@vitalis/api';
+import { completeOnboarding } from '@calorya/api';
 import {
   ACTIVITY_HINT,
   ACTIVITY_LABEL,
@@ -18,7 +18,7 @@ import {
   type ActivityLevel,
   type Goal,
   type Sex,
-} from '@vitalis/core';
+} from '@calorya/core';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { Button, Card, Field, inputClass } from '@/components/ui';
@@ -261,7 +261,7 @@ export default function OnboardingPage() {
         )}
 
         <Button type="submit" disabled={busy} className="w-full">
-          {busy ? 'Menyimpan…' : 'Mulai pakai Vitalis'}
+          {busy ? 'Menyimpan…' : 'Mulai pakai Calorya'}
         </Button>
       </form>
     </main>

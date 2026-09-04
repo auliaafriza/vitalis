@@ -1,6 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
-import type { Database } from '@vitalis/api';
+import type { Database } from '@calorya/api';
 
 const PUBLIC_PATHS = ['/login', '/auth', '/offline', '/manifest.webmanifest', '/sw.js'];
 

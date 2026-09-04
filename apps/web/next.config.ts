@@ -18,7 +18,7 @@ const nextConfig: NextConfig = {
    * transpilePackages lets Next compile them in place, which keeps the
    * monorepo free of a watch-and-rebuild loop during development.
    */
-  transpilePackages: ['@vitalis/core', '@vitalis/api'],
+  transpilePackages: ['@calorya/core', '@calorya/api'],
 
   async headers() {
     return [

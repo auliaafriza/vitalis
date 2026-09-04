@@ -3,13 +3,13 @@ import { Providers } from '@/components/providers';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Vitalis — Pelacak Kesehatan & Nutrisi Harian',
+  title: 'Calorya — Pelacak Kesehatan & Nutrisi Harian',
   description:
     'Catat makanan, air, tidur, langkah, dan berat badan dalam satu tempat. Bisa dipasang di layar utama dan tetap bisa dibuka saat offline.',
   manifest: '/manifest.webmanifest',
   appleWebApp: {
     capable: true,
-    title: 'Vitalis',
+    title: 'Calorya',
     statusBarStyle: 'black-translucent',
   },
   icons: {

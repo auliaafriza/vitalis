@@ -6,7 +6,7 @@ import {
   formatVolume,
   minutesBetween,
   todayKey,
-} from '@vitalis/core';
+} from '@calorya/core';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Button, Card, ErrorNote, ProgressBar } from '../../src/components/ui';

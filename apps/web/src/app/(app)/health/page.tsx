@@ -8,7 +8,7 @@ import {
   formatVolume,
   minutesBetween,
   sleepScore,
-} from '@vitalis/core';
+} from '@calorya/core';
 import { useState } from 'react';
 import { DayNav } from '@/components/nav';
 import {
