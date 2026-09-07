@@ -1,4 +1,4 @@
-# Vitalis
+# Calorya
 
 Pelacak kesehatan harian dan nutrisi lintas platform. Satu monorepo, dua aplikasi
 (Next.js PWA + Expo/React Native), satu domain core yang dipakai bersama, dan satu
@@ -120,7 +120,7 @@ kapan pun.
 ## Struktur
 
 ```
-vitalis/
+calorya/
 ├── packages/
 │   ├── core/        # domain murni: kalkulasi, skema zod, format. Tanpa React, tanpa I/O.
 │   └── api/         # data layer Supabase. Fungsi murni yang menerima client.

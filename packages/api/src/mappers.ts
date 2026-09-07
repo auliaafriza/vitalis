@@ -9,7 +9,7 @@ import type {
   Targets,
   WaterEntry,
   WeightEntry,
-} from '@vitalis/core';
+} from '@calorya/core';
 import type { Database } from './database.types';
 
 /**

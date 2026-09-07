@@ -27,7 +27,7 @@ jobs:
         run: npm run typecheck
 
       - name: Build web
-        run: npm run build -w @vitalis/web
+        run: npm run build -w @calorya/web
         env:
           # Build-time only: the app never reaches this project, but Next needs
           # the variables to exist so the client bundle can be produced.

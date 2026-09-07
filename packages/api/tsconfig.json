@@ -3,7 +3,7 @@
   "compilerOptions": {
     "noEmit": true,
     "paths": {
-      "@vitalis/core": ["../core/src/index.ts"]
+      "@calorya/core": ["../core/src/index.ts"]
     }
   },
   "include": ["src/**/*.ts"]

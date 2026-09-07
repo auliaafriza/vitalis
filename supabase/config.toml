@@ -1,4 +1,4 @@
-project_id = "vitalis"
+project_id = "calorya"
 
 [api]
 enabled = true
@@ -20,7 +20,7 @@ enabled = true
 site_url = "http://localhost:3000"
 additional_redirect_urls = [
   "http://localhost:3000/auth/callback",
-  "vitalis://auth/callback",
+  "calorya://auth/callback",
 ]
 jwt_expiry = 3600
 enable_refresh_token_rotation = true

@@ -1,5 +1,5 @@
 -- ============================================================================
--- Vitalis — initial schema
+-- Calorya — initial schema
 -- Daily health tracking (weight, water, sleep, steps, mood) + nutrition logging
 --
 -- Design notes:

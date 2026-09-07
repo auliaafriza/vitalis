@@ -4,11 +4,11 @@ import {
   type Profile,
   type Targets,
   type TargetsInput,
-} from '@vitalis/core';
-import { requireUserId, unwrap, unwrapMaybe, type VitalisClient } from '../client';
+} from '@calorya/core';
+import { requireUserId, unwrap, unwrapMaybe, type CaloryaClient } from '../client';
 import { toProfile, toTargets } from '../mappers';
 
-export async function getProfile(client: VitalisClient): Promise<Profile | null> {
+export async function getProfile(client: CaloryaClient): Promise<Profile | null> {
   const userId = await requireUserId(client);
   const row = unwrapMaybe(
     await client.from('profiles').select('*').eq('id', userId).single(),
@@ -24,7 +24,7 @@ export async function getProfile(client: VitalisClient): Promise<Profile | null>
  * against the goals the user actually had then — not the ones they set today.
  */
 export async function getTargetsFor(
-  client: VitalisClient,
+  client: CaloryaClient,
   dateKey: string,
 ): Promise<Targets | null> {
   const userId = await requireUserId(client);
@@ -47,7 +47,7 @@ export async function getTargetsFor(
  * derive the first set of targets from the answers.
  */
 export async function completeOnboarding(
-  client: VitalisClient,
+  client: CaloryaClient,
   input: OnboardingInput,
   todayKey: string,
 ): Promise<Targets> {
@@ -104,7 +104,7 @@ export async function completeOnboarding(
 
 /** Write a new target version effective from `dateKey`. */
 export async function saveTargets(
-  client: VitalisClient,
+  client: CaloryaClient,
   targets: TargetsInput | Targets,
   dateKey: string,
 ): Promise<Targets> {
@@ -135,7 +135,7 @@ export async function saveTargets(
 }
 
 export async function updateProfile(
-  client: VitalisClient,
+  client: CaloryaClient,
   patch: Partial<Pick<Profile, 'fullName' | 'activityLevel' | 'goal' | 'timezone' | 'heightCm'>>,
 ): Promise<Profile> {
   const userId = await requireUserId(client);

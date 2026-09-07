@@ -1,5 +1,5 @@
 {
-  "name": "@vitalis/core",
+  "name": "@calorya/core",
   "version": "0.1.0",
   "private": true,
   "description": "Platform-agnostic domain logic: energy calculations, macro targets, daily aggregation, streaks. No React, no I/O.",

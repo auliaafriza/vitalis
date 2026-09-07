@@ -1,5 +1,5 @@
 {
-  "name": "vitalis",
+  "name": "calorya",
   "private": true,
   "version": "0.1.0",
   "description": "Cross-platform daily health & nutrition tracker \u2014 Next.js PWA + Expo, sharing one domain core.",
@@ -8,12 +8,12 @@
     "apps/*"
   ],
   "scripts": {
-    "build:packages": "npm run build -w @vitalis/core -w @vitalis/api",
+    "build:packages": "npm run build -w @calorya/core -w @calorya/api",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "test": "npm run test -w @vitalis/core",
-    "dev:web": "npm run dev -w @vitalis/web",
-    "build:web": "npm run build:packages && npm run build -w @vitalis/web",
-    "dev:mobile": "npm run start -w @vitalis/mobile",
+    "test": "npm run test -w @calorya/core -w @calorya/api",
+    "dev:web": "npm run dev -w @calorya/web",
+    "build:web": "npm run build:packages && npm run build -w @calorya/web",
+    "dev:mobile": "npm run start -w @calorya/mobile",
     "db:reset": "supabase db reset",
     "db:types": "supabase gen types typescript --local > packages/api/src/database.types.ts",
     "db:test": "psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f supabase/tests/rls_and_triggers.sql"

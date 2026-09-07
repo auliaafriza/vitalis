@@ -1,10 +1,11 @@
-import type { Food, FoodInput } from '@vitalis/core';
-import { requireUserId, unwrap, unwrapMaybe, type VitalisClient } from '../client';
+import { toEan13, type Food, type FoodInput } from '@calorya/core';
+import { lookupBarcode, type OpenFoodFactsOptions } from '../openfoodfacts';
+import { requireUserId, unwrap, unwrapMaybe, type CaloryaClient } from '../client';
 import { toFood } from '../mappers';
 
 /** Ranked search over the public catalogue plus the user's own foods. */
 export async function searchFoods(
-  client: VitalisClient,
+  client: CaloryaClient,
   query: string,
   limit = 25,
 ): Promise<Food[]> {
@@ -16,7 +17,7 @@ export async function searchFoods(
 }
 
 /** The catalogue shown before the user types anything. */
-export async function listFoods(client: VitalisClient, limit = 30): Promise<Food[]> {
+export async function listFoods(client: CaloryaClient, limit = 30): Promise<Food[]> {
   const rows = unwrap(
     await client.from('foods').select('*').order('name').limit(limit),
     'listFoods',
@@ -24,7 +25,7 @@ export async function listFoods(client: VitalisClient, limit = 30): Promise<Food
   return rows.map(toFood);
 }
 
-export async function getFood(client: VitalisClient, id: string): Promise<Food | null> {
+export async function getFood(client: CaloryaClient, id: string): Promise<Food | null> {
   const row = unwrapMaybe(
     await client.from('foods').select('*').eq('id', id).maybeSingle(),
     'getFood',
@@ -33,18 +34,66 @@ export async function getFood(client: VitalisClient, id: string): Promise<Food |
 }
 
 export async function findByBarcode(
-  client: VitalisClient,
+  client: CaloryaClient,
   barcode: string,
 ): Promise<Food | null> {
-  const row = unwrapMaybe(
-    await client.from('foods').select('*').eq('barcode', barcode).limit(1).maybeSingle(),
+  // A UPC-A scanned off a bottle and the EAN-13 stored in the catalogue are the
+  // same product, so match on both spellings rather than only what was scanned.
+  const candidates = [barcode, toEan13(barcode)].filter(
+    (value): value is string => Boolean(value),
+  );
+  const rows = unwrap(
+    await client.from('foods').select('*').in('barcode', [...new Set(candidates)]).limit(1),
     'findByBarcode',
   );
+  const row = rows[0];
   return row ? toFood(row) : null;
 }
 
+export type BarcodeResolution =
+  | { status: 'catalogue'; food: Food }
+  | { status: 'imported'; food: Food; missing: string[] }
+  | { status: 'not_found' }
+  | { status: 'unusable' }
+  | { status: 'invalid_barcode' }
+  | { status: 'offline' };
+
+/**
+ * Resolve a scanned barcode to a food the user can log.
+ *
+ * Order matters: our own catalogue first, so a product someone already
+ * corrected by hand is never overwritten by the upstream copy. Only on a miss
+ * do we ask Open Food Facts, and an imported product is saved as a private food
+ * owned by the importer — a stranger's scan should not be able to edit the
+ * shared catalogue.
+ */
+export async function resolveBarcode(
+  client: CaloryaClient,
+  barcode: string,
+  options?: OpenFoodFactsOptions,
+): Promise<BarcodeResolution> {
+  const known = await findByBarcode(client, barcode);
+  if (known) return { status: 'catalogue', food: known };
+
+  const result = await lookupBarcode(barcode, options);
+  switch (result.status) {
+    case 'found': {
+      const food = await createFood(client, result.food);
+      return { status: 'imported', food, missing: result.missing };
+    }
+    case 'not_found':
+      return { status: 'not_found' };
+    case 'unusable':
+      return { status: 'unusable' };
+    case 'invalid_barcode':
+      return { status: 'invalid_barcode' };
+    default:
+      return { status: 'offline' };
+  }
+}
+
 /** Foods the user has logged most often — the top of the "add food" screen. */
-export async function recentFoods(client: VitalisClient, limit = 12): Promise<Food[]> {
+export async function recentFoods(client: CaloryaClient, limit = 12): Promise<Food[]> {
   const userId = await requireUserId(client);
   const entries = unwrap(
     await client
@@ -77,7 +126,7 @@ export async function recentFoods(client: VitalisClient, limit = 12): Promise<Fo
 }
 
 /** Create a private food owned by the current user. */
-export async function createFood(client: VitalisClient, input: FoodInput): Promise<Food> {
+export async function createFood(client: CaloryaClient, input: FoodInput): Promise<Food> {
   const userId = await requireUserId(client);
   const row = unwrap(
     await client

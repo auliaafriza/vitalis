@@ -10,8 +10,8 @@ import type {
   WaterEntryInput,
   WeightEntry,
   WeightEntryInput,
-} from '@vitalis/core';
-import { requireUserId, unwrap, unwrapMaybe, type VitalisClient } from '../client';
+} from '@calorya/core';
+import { requireUserId, unwrap, unwrapMaybe, type CaloryaClient } from '../client';
 import {
   toDaySummary,
   toMoodEntry,
@@ -24,7 +24,7 @@ import {
 // --- Water ------------------------------------------------------------------
 
 export async function getWaterEntries(
-  client: VitalisClient,
+  client: CaloryaClient,
   dateKey: string,
 ): Promise<WaterEntry[]> {
   const userId = await requireUserId(client);
@@ -41,7 +41,7 @@ export async function getWaterEntries(
 }
 
 export async function addWater(
-  client: VitalisClient,
+  client: CaloryaClient,
   input: WaterEntryInput,
 ): Promise<WaterEntry> {
   const userId = await requireUserId(client);
@@ -60,7 +60,7 @@ export async function addWater(
   return toWaterEntry(row);
 }
 
-export async function deleteWater(client: VitalisClient, id: string): Promise<void> {
+export async function deleteWater(client: CaloryaClient, id: string): Promise<void> {
   const userId = await requireUserId(client);
   const { error } = await client
     .from('water_entries')
@@ -73,7 +73,7 @@ export async function deleteWater(client: VitalisClient, id: string): Promise<vo
 // --- Weight -----------------------------------------------------------------
 
 export async function getWeightEntries(
-  client: VitalisClient,
+  client: CaloryaClient,
   fromDate: string,
   toDate: string,
 ): Promise<WeightEntry[]> {
@@ -92,7 +92,7 @@ export async function getWeightEntries(
 }
 
 export async function getLatestWeight(
-  client: VitalisClient,
+  client: CaloryaClient,
 ): Promise<WeightEntry | null> {
   const userId = await requireUserId(client);
   const row = unwrapMaybe(
@@ -110,7 +110,7 @@ export async function getLatestWeight(
 
 /** One weigh-in per day; logging twice replaces rather than duplicates. */
 export async function upsertWeight(
-  client: VitalisClient,
+  client: CaloryaClient,
   input: WeightEntryInput,
 ): Promise<WeightEntry> {
   const userId = await requireUserId(client);
@@ -137,7 +137,7 @@ export async function upsertWeight(
 // --- Sleep ------------------------------------------------------------------
 
 export async function getSleep(
-  client: VitalisClient,
+  client: CaloryaClient,
   dateKey: string,
 ): Promise<SleepEntry | null> {
   const userId = await requireUserId(client);
@@ -154,7 +154,7 @@ export async function getSleep(
 }
 
 export async function upsertSleep(
-  client: VitalisClient,
+  client: CaloryaClient,
   input: SleepEntryInput,
 ): Promise<SleepEntry> {
   const userId = await requireUserId(client);
@@ -183,7 +183,7 @@ export async function upsertSleep(
 // --- Steps ------------------------------------------------------------------
 
 export async function getSteps(
-  client: VitalisClient,
+  client: CaloryaClient,
   dateKey: string,
 ): Promise<StepEntry | null> {
   const userId = await requireUserId(client);
@@ -200,7 +200,7 @@ export async function getSteps(
 }
 
 export async function upsertSteps(
-  client: VitalisClient,
+  client: CaloryaClient,
   input: StepEntryInput,
 ): Promise<StepEntry> {
   const userId = await requireUserId(client);
@@ -227,7 +227,7 @@ export async function upsertSteps(
 // --- Mood -------------------------------------------------------------------
 
 export async function getMoodEntries(
-  client: VitalisClient,
+  client: CaloryaClient,
   dateKey: string,
 ): Promise<MoodEntry[]> {
   const userId = await requireUserId(client);
@@ -244,7 +244,7 @@ export async function getMoodEntries(
 }
 
 export async function addMood(
-  client: VitalisClient,
+  client: CaloryaClient,
   input: MoodEntryInput,
 ): Promise<MoodEntry> {
   const userId = await requireUserId(client);
@@ -269,7 +269,7 @@ export async function addMood(
 
 /** Daily summary rows for a window — one query behind every chart. */
 export async function getDaySummaries(
-  client: VitalisClient,
+  client: CaloryaClient,
   fromDate: string,
   toDate: string,
 ): Promise<DaySummary[]> {
@@ -288,7 +288,7 @@ export async function getDaySummaries(
 }
 
 export async function getDaySummary(
-  client: VitalisClient,
+  client: CaloryaClient,
   dateKey: string,
 ): Promise<DaySummary | null> {
   const summaries = await getDaySummaries(client, dateKey, dateKey);
@@ -297,7 +297,7 @@ export async function getDaySummary(
 
 /** Days with any activity at all, for streak calculation. */
 export async function getActiveDays(
-  client: VitalisClient,
+  client: CaloryaClient,
   fromDate: string,
   toDate: string,
 ): Promise<string[]> {

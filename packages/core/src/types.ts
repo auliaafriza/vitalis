@@ -3,7 +3,7 @@
  *
  * These mirror the database schema but are deliberately *not* generated from
  * it: the app should be able to reason about a "day of eating" without a
- * Supabase client anywhere in scope. Mapping happens in @vitalis/api.
+ * Supabase client anywhere in scope. Mapping happens in @calorya/api.
  */
 
 export type Sex = 'male' | 'female';

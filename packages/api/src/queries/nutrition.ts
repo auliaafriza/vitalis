@@ -1,10 +1,10 @@
-import type { FoodEntry, FoodEntryInput, MealType, Nutrients } from '@vitalis/core';
-import { MEAL_TYPES, sumNutrients } from '@vitalis/core';
-import { requireUserId, unwrap, type VitalisClient } from '../client';
+import type { FoodEntry, FoodEntryInput, MealType, Nutrients } from '@calorya/core';
+import { MEAL_TYPES, sumNutrients } from '@calorya/core';
+import { requireUserId, unwrap, type CaloryaClient } from '../client';
 import { toFoodEntry } from '../mappers';
 
 export async function getFoodEntries(
-  client: VitalisClient,
+  client: CaloryaClient,
   dateKey: string,
 ): Promise<FoodEntry[]> {
   const userId = await requireUserId(client);
@@ -35,7 +35,7 @@ export function groupByMeal(entries: readonly FoodEntry[]): MealGroup[] {
 }
 
 export async function addFoodEntry(
-  client: VitalisClient,
+  client: CaloryaClient,
   input: FoodEntryInput,
 ): Promise<FoodEntry> {
   const userId = await requireUserId(client);
@@ -58,7 +58,7 @@ export async function addFoodEntry(
 }
 
 export async function updateFoodEntryQuantity(
-  client: VitalisClient,
+  client: CaloryaClient,
   entryId: string,
   quantityG: number,
 ): Promise<FoodEntry> {
@@ -77,7 +77,7 @@ export async function updateFoodEntryQuantity(
 }
 
 export async function deleteFoodEntry(
-  client: VitalisClient,
+  client: CaloryaClient,
   entryId: string,
 ): Promise<void> {
   const userId = await requireUserId(client);
@@ -95,7 +95,7 @@ export async function deleteFoodEntry(
  * reflect the food as it is defined now.
  */
 export async function copyMeal(
-  client: VitalisClient,
+  client: CaloryaClient,
   fromDate: string,
   toDate: string,
   meal: MealType,

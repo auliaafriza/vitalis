@@ -1,5 +1,5 @@
 -- ============================================================================
--- Vitalis — public food catalogue seed (Indonesian-first)
+-- Calorya — public food catalogue seed (Indonesian-first)
 --
 -- All values are per 100 g (or per 100 ml where is_liquid = true).
 -- Figures are typical published values for home-cooked portions; they are
