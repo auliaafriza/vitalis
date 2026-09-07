@@ -30,7 +30,8 @@
       },
       "permissions": [
         "android.permission.ACTIVITY_RECOGNITION",
-        "android.permission.CAMERA"
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
       ],
       "edgeToEdgeEnabled": true,
       "versionCode": 1
@@ -48,6 +49,12 @@
     "experiments": {
       "typedRoutes": true
     },
-    "owner": "auliaafriza"
+    "owner": "auliaafriza",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "4bbab60b-5c86-4a0d-af0c-7d94e1b3e839"
+      }
+    }
   }
 }
