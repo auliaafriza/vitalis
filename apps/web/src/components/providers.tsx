@@ -2,6 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
+import { ThemeProvider } from '@/lib/theme';
 
 /**
  * React Query does the caching, retry and revalidation that a tracker needs:
@@ -40,5 +41,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
     else window.addEventListener('load', register, { once: true });
   }, []);
 
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>{children}</ThemeProvider>
+    </QueryClientProvider>
+  );
 }

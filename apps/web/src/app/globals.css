@@ -1,35 +1,125 @@
 @import 'tailwindcss';
 
 /* ---------------------------------------------------------------------------
-   Design tokens.
+   Design tokens — one palette, two themes.
+
+   The `ink` scale does NOT mean lightness. It means DISTANCE FROM THE READING
+   SURFACE: 950 is the page you look past, 100 is the text you look at, and the
+   numbers in between are the layers stacked between them. That is why the same
+   `text-ink-100` works in both themes without a single `dark:` variant in the
+   markup — the scale runs dark-to-light in the dark theme and light-to-dark in
+   the light one, and every component keeps meaning exactly what it meant.
+
+   The alternative — a `dark:` prefix on every colour class — would have been
+   ~170 edits that must all be kept in step forever. This is two blocks of
+   variables.
+
    One accent per data domain so a colour always means the same thing:
-   food = lime, water = sky, sleep = indigo, movement = amber, body = rose.
+   food = green, water = sky, sleep = indigo, movement = amber, body = rose.
    --------------------------------------------------------------------------- */
-@theme {
-  --color-ink-950: oklch(0.16 0.012 250);
-  --color-ink-900: oklch(0.21 0.014 250);
-  --color-ink-800: oklch(0.27 0.015 250);
-  --color-ink-700: oklch(0.36 0.016 250);
-  --color-ink-500: oklch(0.58 0.014 250);
-  --color-ink-300: oklch(0.78 0.010 250);
-  --color-ink-100: oklch(0.94 0.006 250);
 
-  --color-brand-400: oklch(0.78 0.15 165);
-  --color-brand-500: oklch(0.70 0.16 165);
-  --color-brand-600: oklch(0.60 0.15 165);
+/* Light — the default, and what the product is designed in. */
+:root {
+  color-scheme: light;
 
-  --color-food: oklch(0.80 0.17 130);
-  --color-water: oklch(0.75 0.14 230);
-  --color-sleep: oklch(0.70 0.14 285);
-  --color-move: oklch(0.82 0.15 75);
-  --color-body: oklch(0.72 0.16 15);
+  --ink-950: #f4f4ee; /* page */
+  --ink-900: #ffffff; /* card */
+  --ink-800: #eceee4; /* raised: chips, active states */
+  --ink-700: #d9dccf; /* stronger border */
+  --ink-500: #6c7a70; /* muted text — 4.9:1 on white */
+  --ink-300: #414f47; /* soft text  — 9.0:1 on white */
+  --ink-100: #16241c; /* primary text */
+
+  --brand-400: #17734a; /* accent text on a light surface */
+  --brand-500: #15653c; /* filled buttons */
+  --brand-600: #0e4b2c;
+
+  --food: #3f9a57;
+  --water: #2f86c4;
+  --sleep: #6a5bd0;
+  --move: #c07d12;
+  --body: #c4506a;
+
+  --shadow-card: 0 1px 2px rgb(20 36 28 / 0.04), 0 8px 24px rgb(20 36 28 / 0.05);
+}
+
+/* Dark — chosen explicitly, or followed from the system when nothing is set. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+
+    --ink-950: #0d1117;
+    --ink-900: #161b22;
+    --ink-800: #1f2732;
+    --ink-700: #2f3845;
+    --ink-500: #93a0ae;
+    --ink-300: #c6cedb;
+    --ink-100: #eef1f5;
+
+    --brand-400: #4fe0af;
+    --brand-500: #3dd6a0;
+    --brand-600: #2bb083;
+
+    --food: #a8e05f;
+    --water: #5cb8f0;
+    --sleep: #9b8cf5;
+    --move: #f0b95c;
+    --body: #f07a8c;
+
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3);
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --ink-950: #0d1117;
+  --ink-900: #161b22;
+  --ink-800: #1f2732;
+  --ink-700: #2f3845;
+  --ink-500: #93a0ae;
+  --ink-300: #c6cedb;
+  --ink-100: #eef1f5;
+
+  --brand-400: #4fe0af;
+  --brand-500: #3dd6a0;
+  --brand-600: #2bb083;
+
+  --food: #a8e05f;
+  --water: #5cb8f0;
+  --sleep: #9b8cf5;
+  --move: #f0b95c;
+  --body: #f07a8c;
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3);
+}
+
+/*
+ * `@theme inline` emits `var(--ink-500)` into the utilities rather than baking
+ * in a literal, which is what lets the blocks above re-point them at runtime.
+ * A plain `@theme` would freeze the light values into every class.
+ */
+@theme inline {
+  --color-ink-950: var(--ink-950);
+  --color-ink-900: var(--ink-900);
+  --color-ink-800: var(--ink-800);
+  --color-ink-700: var(--ink-700);
+  --color-ink-500: var(--ink-500);
+  --color-ink-300: var(--ink-300);
+  --color-ink-100: var(--ink-100);
+
+  --color-brand-400: var(--brand-400);
+  --color-brand-500: var(--brand-500);
+  --color-brand-600: var(--brand-600);
+
+  --color-food: var(--food);
+  --color-water: var(--water);
+  --color-sleep: var(--sleep);
+  --color-move: var(--move);
+  --color-body: var(--body);
 
   --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
     'Helvetica Neue', Arial, sans-serif;
-}
-
-:root {
-  color-scheme: dark;
 }
 
 html,
@@ -46,6 +136,15 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/*
+ * Cards carry a real shadow in the light theme and almost none in the dark
+ * one: on a dark ground a shadow is invisible, and the border is what
+ * separates the layers instead.
+ */
+.card-shadow {
+  box-shadow: var(--shadow-card);
+}
+
 /* Numbers in tables and stat tiles should not jitter as they update. */
 .tabular {
   font-variant-numeric: tabular-nums;
@@ -57,6 +156,92 @@ body {
   *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   The printable report (/laporan).
+   A document that ends up on a dietitian's desk should look like a document,
+   not like a screenshot of a dark app — so this one region opts out of the
+   dark theme entirely, on screen as well as on paper.
+   --------------------------------------------------------------------------- */
+.report {
+  color-scheme: light;
+  background: #ffffff;
+  color: #111827;
+}
+
+.report table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.report th,
+.report td {
+  border-bottom: 1px solid #e5e7eb;
+  padding: 4px 6px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.report th:first-child,
+.report td:first-child {
+  text-align: left;
+}
+
+.report thead th {
+  border-bottom: 1px solid #9ca3af;
+  font-weight: 600;
+  font-size: 11px;
+  color: #374151;
+}
+
+/* Repeat the header on every printed page of a long table. */
+.report thead {
+  display: table-header-group;
+}
+
+.report tr {
+  break-inside: avoid;
+}
+
+@page {
+  margin: 14mm;
+}
+
+@media print {
+  /*
+   * `color-scheme: dark` on :root makes Chromium paint the page margin box
+   * black even when html and body are explicitly white — the paper would come
+   * out with a dark border. Printing is always light.
+   */
+  :root {
+    color-scheme: light;
+  }
+
+  html,
+  body {
+    height: auto;
+    background: #ffffff !important;
+    color: #111827 !important;
+  }
+
+  body {
+    padding-bottom: 0;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .report {
+    padding: 0 !important;
+    max-width: none !important;
+  }
+
+  .report .page-break {
+    break-before: page;
   }
 }
 

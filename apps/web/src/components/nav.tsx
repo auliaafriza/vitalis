@@ -19,7 +19,7 @@ export function BottomNav() {
   return (
     <nav
       aria-label="Navigasi utama"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-ink-800 bg-ink-950/95 backdrop-blur md:inset-y-0 md:right-auto md:w-56 md:border-t-0 md:border-r"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-ink-800 bg-ink-950/95 backdrop-blur-md md:inset-y-0 md:right-auto md:w-56 md:border-t-0 md:border-r"
     >
       <div className="mx-auto flex max-w-lg items-stretch md:h-full md:max-w-none md:flex-col md:gap-1 md:p-3">
         <p className="hidden px-3 py-4 text-lg font-semibold text-brand-400 md:block">

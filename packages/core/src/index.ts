@@ -4,4 +4,6 @@ export * from './nutrition';
 export * from './health';
 export * from './schemas';
 export * from './barcode';
+export * from './entitlements';
+export * from './export';
 export * from './format';

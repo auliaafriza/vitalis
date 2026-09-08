@@ -12,9 +12,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, ErrorNote, PasswordInput } from '../src/components/ui';
 import { supabase } from '../src/lib/supabase';
-import { radius, spacing, theme } from '../src/lib/theme';
+import { radius, spacing, useTheme, useThemedStyles, type Theme } from '../src/lib/theme';
 
 export default function LoginScreen() {
+  const { theme } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -115,29 +117,30 @@ export default function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: theme.bg },
-  container: { padding: spacing.xl, flexGrow: 1, justifyContent: 'center' },
-  brand: { color: theme.brand, fontSize: 26, fontWeight: '700' },
-  title: { color: theme.text, fontSize: 20, fontWeight: '600', marginTop: spacing.sm },
-  subtitle: { color: theme.textDim, fontSize: 13, marginTop: 4 },
-  form: { marginTop: spacing.xl, gap: spacing.sm },
-  label: { color: theme.textMuted, fontSize: 13, fontWeight: '500' },
-  input: {
-    backgroundColor: theme.bg,
-    borderColor: theme.border,
-    borderWidth: 1,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 12,
-    color: theme.text,
-    fontSize: 15,
-  },
-  notice: { color: theme.brand, fontSize: 13 },
-  switch: {
-    color: theme.brand,
-    textAlign: 'center',
-    marginTop: spacing.lg,
-    fontSize: 14,
-  },
-});
+const makeStyles = (theme: Theme) =>
+  StyleSheet.create({
+    safe: { flex: 1, backgroundColor: theme.bg },
+    container: { padding: spacing.xl, flexGrow: 1, justifyContent: 'center' },
+    brand: { color: theme.brand, fontSize: 26, fontWeight: '700' },
+    title: { color: theme.text, fontSize: 20, fontWeight: '600', marginTop: spacing.sm },
+    subtitle: { color: theme.textDim, fontSize: 13, marginTop: 4 },
+    form: { marginTop: spacing.xl, gap: spacing.sm },
+    label: { color: theme.textMuted, fontSize: 13, fontWeight: '500' },
+    input: {
+      backgroundColor: theme.bg,
+      borderColor: theme.border,
+      borderWidth: 1,
+      borderRadius: radius.md,
+      paddingHorizontal: spacing.md,
+      paddingVertical: 12,
+      color: theme.text,
+      fontSize: 15,
+    },
+    notice: { color: theme.brand, fontSize: 13 },
+    switch: {
+      color: theme.brand,
+      textAlign: 'center',
+      marginTop: spacing.lg,
+      fontSize: 14,
+    },
+  });

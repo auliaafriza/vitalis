@@ -70,6 +70,7 @@ export function toFood(row: Tables['foods']['Row']): Food {
     fiberG: num(row.fiber_g),
     sugarG: num(row.sugar_g),
     sodiumMg: num(row.sodium_mg),
+    category: row.category,
     servingLabel: row.serving_label,
     servingG: nullableNum(row.serving_g),
     isLiquid: row.is_liquid,

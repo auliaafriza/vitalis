@@ -5,7 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { theme } from '../src/lib/theme';
+import { ThemeProvider, useTheme } from '../src/lib/theme';
 import { supabase } from '../src/lib/supabase';
 
 const SessionContext = createContext<{ session: Session | null; loading: boolean }>({
@@ -63,24 +63,42 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
-        <SessionContext.Provider value={{ session, loading }}>
-          <StatusBar style="light" />
-          {loading ? (
-            <View
-              style={{
-                flex: 1,
-                backgroundColor: theme.bg,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <ActivityIndicator color={theme.brand} />
-            </View>
-          ) : (
-            <Slot />
-          )}
-        </SessionContext.Provider>
+        <ThemeProvider>
+          <SessionContext.Provider value={{ session, loading }}>
+            <Shell loading={loading} />
+          </SessionContext.Provider>
+        </ThemeProvider>
       </QueryClientProvider>
     </SafeAreaProvider>
+  );
+}
+
+/**
+ * Split out so it sits *inside* ThemeProvider — the status bar and the
+ * loading screen both need the active theme, and a component cannot read a
+ * context it renders itself.
+ */
+function Shell({ loading }: { loading: boolean }) {
+  const { theme, scheme } = useTheme();
+
+  return (
+    <>
+      {/* Inverted: dark text on the light theme, light text on the dark one. */}
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+      {loading ? (
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: theme.bg,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <ActivityIndicator color={theme.brand} />
+        </View>
+      ) : (
+        <Slot />
+      )}
+    </>
   );
 }

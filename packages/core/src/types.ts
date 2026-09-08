@@ -19,6 +19,20 @@ export type Goal = 'lose' | 'maintain' | 'gain';
 
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 
+/**
+ * How a food is browsed, not what it is made of.
+ * 'other' is for ingredients people log as part of a dish — oil, sugar,
+ * sambal — which are real foods but not things anyone browses a tile for.
+ */
+export type FoodCategory =
+  | 'main'
+  | 'snack'
+  | 'drink'
+  | 'fruit'
+  | 'vegetable'
+  | 'packaged'
+  | 'other';
+
 /** A date in the user's local timezone, formatted YYYY-MM-DD. */
 export type DateKey = string;
 
@@ -64,6 +78,7 @@ export interface Food extends Nutrients {
   name: string;
   brand: string | null;
   barcode: string | null;
+  category: FoodCategory;
   servingLabel: string | null;
   servingG: number | null;
   isLiquid: boolean;

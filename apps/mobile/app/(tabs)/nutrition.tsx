@@ -1,19 +1,24 @@
 import { groupByMeal } from '@calorya/api';
 import {
+  CATEGORY_EMOJI,
+  CATEGORY_LABEL,
+  CATEGORY_TINT,
   defaultPortionG,
+  FEATURED_CATEGORIES,
   formatKcal,
   macroSplit,
-  MEAL_EMOJI,
   MEAL_LABEL,
+  mealForHour,
   nutrientsForQuantity,
   sumNutrients,
   todayKey,
   type Food,
+  type FoodCategory,
   type MealType,
 } from '@calorya/core';
-import { useMemo, useState } from 'react';
+import { useLocalSearchParams } from 'expo-router';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  FlatList,
   Modal,
   Pressable,
   ScrollView,
@@ -23,12 +28,14 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { BarcodeIcon, PlusIcon, SearchIcon } from '../../src/components/icons';
 import {
   Button,
   Card,
   EmptyState,
   ErrorNote,
   ProgressBar,
+  Segmented,
 } from '../../src/components/ui';
 import {
   useAddFood,
@@ -41,9 +48,24 @@ import {
   useTargets,
 } from '../../src/lib/hooks';
 import { BarcodeScanner } from '../../src/components/barcode-scanner';
-import { radius, spacing, theme } from '../../src/lib/theme';
+import {
+  radius,
+  spacing,
+  useTheme,
+  useThemedStyles,
+  type Theme,
+} from '../../src/lib/theme';
+
+const MEAL_OPTIONS = (['breakfast', 'lunch', 'dinner', 'snack'] as const).map((meal) => ({
+  value: meal,
+  label: MEAL_LABEL[meal],
+}));
 
 export default function NutritionScreen() {
+  const { theme } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+  const params = useLocalSearchParams<{ add?: string }>();
+
   const { data: profile } = useProfile();
   const timezone =
     profile?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'Asia/Jakarta';
@@ -51,8 +73,63 @@ export default function NutritionScreen() {
 
   const { data: entries, error } = useFoodEntries(day);
   const { data: targets } = useTargets(day);
+  const { data: recent } = useRecentFoods();
   const deleteFood = useDeleteFood(day);
-  const [picking, setPicking] = useState<MealType | null>(null);
+
+  const [query, setQuery] = useState('');
+  const [category, setCategory] = useState<FoodCategory | null>(null);
+  const [chosen, setChosen] = useState<Food | null>(null);
+  const searchRef = useRef<TextInput>(null);
+
+  // The + button in the tab bar lands here with ?add=1 and should feel like it
+  // opened something, so it puts the cursor in the search field.
+  useEffect(() => {
+    if (params.add) searchRef.current?.focus();
+  }, [params.add]);
+
+  const trimmed = query.trim();
+  const browsing = trimmed.length > 0 || category !== null;
+  const { data: results } = useFoodSearch(trimmed, category);
+
+  /**
+   * The scanner deliberately lives OUTSIDE any Modal.
+   *
+   * CameraView renders into its own native surface, and nesting that inside a
+   * React Native Modal is the classic way to get a preview that stays black on
+   * Android — the Modal is a separate window and the camera surface never gets
+   * attached to it. Scanning is a full-screen step of its own instead, which is
+   * also the better shape for holding a phone up to a package.
+   */
+  const [scanning, setScanning] = useState(false);
+  const [scanNote, setScanNote] = useState<string | null>(null);
+  const resolve = useResolveBarcode();
+
+  function closeScanner() {
+    setScanning(false);
+    setScanNote(null);
+  }
+
+  function handleBarcode(barcode: string) {
+    setScanNote(null);
+    resolve.mutate(barcode, {
+      onSuccess: (result) => {
+        if (result.status === 'catalogue' || result.status === 'imported') {
+          closeScanner();
+          setChosen(result.food);
+          return;
+        }
+        setScanNote(
+          result.status === 'not_found'
+            ? 'Produk ini belum ada di database mana pun. Tambahkan manual saja.'
+            : result.status === 'unusable'
+              ? 'Produk ditemukan tapi data gizinya tidak lengkap.'
+              : result.status === 'invalid_barcode'
+                ? 'Angka barcode tidak valid.'
+                : 'Tidak ada koneksi ke database produk. Coba lagi nanti.',
+        );
+      },
+    });
+  }
 
   const groups = useMemo(() => groupByMeal(entries ?? []), [entries]);
   const totals = useMemo(() => sumNutrients(entries ?? []), [entries]);
@@ -60,15 +137,146 @@ export default function NutritionScreen() {
 
   if (error) {
     return (
-      <View style={styles.screen}>
-        <ErrorNote error={error} />
-      </View>
+      <SafeAreaView edges={['top']} style={styles.screen}>
+        <View style={{ padding: spacing.lg }}>
+          <ErrorNote error={error} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Full-screen scanner: a plain screen, not a Modal. See the note above.
+  if (scanning) {
+    return (
+      <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
+        <View style={styles.sheetHeader}>
+          <Text style={styles.sheetTitle}>Pindai barcode</Text>
+          <Pressable onPress={closeScanner} accessibilityRole="button">
+            <Text style={styles.link}>Batal</Text>
+          </Pressable>
+        </View>
+        <BarcodeScanner
+          onDetected={handleBarcode}
+          onCancel={closeScanner}
+          busy={resolve.isPending}
+          note={scanNote}
+        />
+      </SafeAreaView>
     );
   }
 
   return (
-    <>
-      <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+    <SafeAreaView edges={['top']} style={styles.screen}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Text style={styles.title}>Catat Makanan</Text>
+        <Text style={styles.subtitle}>
+          Cari atau pindai makanan, langsung lihat informasi kalorinya.
+        </Text>
+
+        <View style={styles.searchRow}>
+          <SearchIcon color={theme.textDim} size={18} weight={1.8} />
+          <TextInput
+            ref={searchRef}
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Cari makanan, contoh: nasi, ayam, apel…"
+            placeholderTextColor={theme.textDim}
+            style={styles.searchInput}
+            returnKeyType="search"
+          />
+          <Pressable
+            onPress={() => setScanning(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Pindai barcode"
+            hitSlop={8}
+          >
+            <BarcodeIcon color={theme.textMuted} size={20} weight={1.8} />
+          </Pressable>
+        </View>
+
+        {browsing ? (
+          <View style={{ gap: spacing.md }}>
+            <View style={styles.browseHeader}>
+              <Text style={styles.sectionTitle}>
+                {category ? CATEGORY_LABEL[category] : `Hasil untuk “${trimmed}”`}
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  setCategory(null);
+                  setQuery('');
+                }}
+              >
+                <Text style={styles.link}>Selesai</Text>
+              </Pressable>
+            </View>
+
+            {(results ?? []).length === 0 ? (
+              <View style={{ gap: spacing.md }}>
+                <EmptyState
+                  title="Tidak ada hasil"
+                  description="Kalau ini produk kemasan, barcode-nya biasanya lebih cepat ketemu daripada namanya."
+                />
+                <Button label="Pindai barcode" onPress={() => setScanning(true)} />
+              </View>
+            ) : (
+              <View style={styles.list}>
+                {(results ?? []).map((food) => (
+                  <FoodRow
+                    key={food.id}
+                    food={food}
+                    onPress={() => setChosen(food)}
+                    styles={styles}
+                    theme={theme}
+                  />
+                ))}
+              </View>
+            )}
+          </View>
+        ) : (
+          <>
+            <Text style={styles.sectionTitle}>Kategori Populer</Text>
+            <View style={styles.grid}>
+              {FEATURED_CATEGORIES.map((key) => (
+                <Pressable
+                  key={key}
+                  accessibilityRole="button"
+                  accessibilityLabel={CATEGORY_LABEL[key]}
+                  onPress={() => setCategory(key)}
+                  style={({ pressed }) => [styles.tile, pressed && styles.tilePressed]}
+                >
+                  <View style={[styles.tileIcon, { backgroundColor: CATEGORY_TINT[key] }]}>
+                    <Text style={styles.tileEmoji}>{CATEGORY_EMOJI[key]}</Text>
+                  </View>
+                  <Text style={styles.tileLabel} numberOfLines={2}>
+                    {CATEGORY_LABEL[key]}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
+            {recent && recent.length > 0 ? (
+              <>
+                <Text style={styles.sectionTitle}>Terakhir Dicatat</Text>
+                <View style={styles.list}>
+                  {recent.slice(0, 5).map((food) => (
+                    <FoodRow
+                      key={food.id}
+                      food={food}
+                      onPress={() => setChosen(food)}
+                      styles={styles}
+                      theme={theme}
+                    />
+                  ))}
+                </View>
+              </>
+            ) : null}
+          </>
+        )}
+
         <Card>
           <View style={styles.totalRow}>
             <Text style={styles.total}>{formatKcal(totals.kcal)}</Text>
@@ -100,16 +308,13 @@ export default function NutritionScreen() {
 
         {groups.map((group) => (
           <View key={group.meal} style={{ gap: spacing.sm }}>
-            <View style={styles.mealHeader}>
-              <Text style={styles.mealTitle}>
-                {MEAL_EMOJI[group.meal]} {MEAL_LABEL[group.meal]}
+            <View style={styles.browseHeader}>
+              <Text style={styles.sectionTitle}>
+                {MEAL_LABEL[group.meal]}
                 {group.entries.length > 0
                   ? `  ·  ${Math.round(group.totals.kcal)} kkal`
                   : ''}
               </Text>
-              <Pressable onPress={() => setPicking(group.meal)} accessibilityRole="button">
-                <Text style={styles.addLink}>+ Tambah</Text>
-              </Pressable>
             </View>
 
             {group.entries.length === 0 ? (
@@ -120,19 +325,19 @@ export default function NutritionScreen() {
                 ].toLowerCase()}.`}
               />
             ) : (
-              <View style={styles.entryList}>
+              <View style={styles.list}>
                 {group.entries.map((entry) => (
-                  <View key={entry.id} style={styles.entryRow}>
+                  <View key={entry.id} style={styles.row}>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.entryName} numberOfLines={1}>
+                      <Text style={styles.rowName} numberOfLines={1}>
                         {entry.foodName}
                       </Text>
-                      <Text style={styles.entryMeta}>
+                      <Text style={styles.rowMeta}>
                         {Math.round(entry.quantityG)} g · P {entry.proteinG.toFixed(0)} · K{' '}
                         {entry.carbsG.toFixed(0)} · L {entry.fatG.toFixed(0)}
                       </Text>
                     </View>
-                    <Text style={styles.entryKcal}>{Math.round(entry.kcal)}</Text>
+                    <Text style={styles.rowKcal}>{Math.round(entry.kcal)}</Text>
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel={`Hapus ${entry.foodName}`}
@@ -150,175 +355,89 @@ export default function NutritionScreen() {
       </ScrollView>
 
       <Modal
-        visible={picking !== null}
+        visible={chosen !== null}
         animationType="slide"
         presentationStyle="pageSheet"
-        onRequestClose={() => setPicking(null)}
+        onRequestClose={() => setChosen(null)}
       >
-        {picking ? (
-          <FoodPickerSheet day={day} meal={picking} onClose={() => setPicking(null)} />
+        {chosen ? (
+          <PortionSheet
+            day={day}
+            timezone={timezone}
+            food={chosen}
+            onClose={() => setChosen(null)}
+          />
         ) : null}
       </Modal>
-    </>
-  );
-}
-
-function FoodPickerSheet({
-  day,
-  meal,
-  onClose,
-}: {
-  day: string;
-  meal: MealType;
-  onClose: () => void;
-}) {
-  const [query, setQuery] = useState('');
-  const [selected, setSelected] = useState<Food | null>(null);
-  const [scanning, setScanning] = useState(false);
-  const [scanNote, setScanNote] = useState<string | null>(null);
-  const { data: results } = useFoodSearch(query);
-  const { data: recent } = useRecentFoods();
-  const addFood = useAddFood(day);
-  const resolve = useResolveBarcode();
-
-  function handleBarcode(barcode: string) {
-    setScanNote(null);
-    resolve.mutate(barcode, {
-      onSuccess: (result) => {
-        if (result.status === 'catalogue' || result.status === 'imported') {
-          setScanning(false);
-          setSelected(result.food);
-          return;
-        }
-        setScanNote(
-          result.status === 'not_found'
-            ? 'Produk ini belum ada di database mana pun. Tambahkan manual saja.'
-            : result.status === 'unusable'
-              ? 'Produk ditemukan tapi data gizinya tidak lengkap.'
-              : result.status === 'invalid_barcode'
-                ? 'Angka barcode tidak valid.'
-                : 'Tidak ada koneksi ke database produk. Coba lagi nanti.',
-        );
-      },
-    });
-  }
-
-  const list = query.trim().length === 0 && recent?.length ? recent : (results ?? []);
-
-  return (
-    <SafeAreaView style={styles.sheet}>
-      <View style={styles.sheetHeader}>
-        <Text style={styles.sheetTitle}>
-          {selected
-            ? 'Berapa porsinya?'
-            : scanning
-              ? 'Pindai barcode'
-              : `Tambah ke ${MEAL_LABEL[meal]}`}
-        </Text>
-        <Pressable
-          onPress={
-            selected
-              ? () => setSelected(null)
-              : scanning
-                ? () => setScanning(false)
-                : onClose
-          }
-        >
-          <Text style={styles.addLink}>
-            {selected || scanning ? 'Kembali' : 'Tutup'}
-          </Text>
-        </Pressable>
-      </View>
-
-      {scanning && !selected ? (
-        <BarcodeScanner
-          onDetected={handleBarcode}
-          onCancel={() => setScanning(false)}
-          busy={resolve.isPending}
-          note={scanNote}
-        />
-      ) : selected ? (
-        <PortionStep
-          food={selected}
-          busy={addFood.isPending}
-          error={addFood.error}
-          onSubmit={(quantityG) =>
-            addFood.mutate(
-              { foodId: selected.id, loggedOn: day, meal, quantityG },
-              { onSuccess: onClose },
-            )
-          }
-        />
-      ) : (
-        <>
-          <View style={styles.searchRow}>
-            <TextInput
-              value={query}
-              onChangeText={setQuery}
-              placeholder="Cari makanan… (mis. nasi, tempe)"
-              placeholderTextColor={theme.textDim}
-              style={[styles.input, { flex: 1 }]}
-              autoFocus
-            />
-            <Pressable
-              onPress={() => setScanning(true)}
-              accessibilityRole="button"
-              accessibilityLabel="Pindai barcode"
-              style={styles.scanButton}
-            >
-              <Text style={{ fontSize: 18 }}>▥</Text>
-            </Pressable>
-          </View>
-          <FlatList
-            data={list}
-            keyExtractor={(item) => item.id}
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ paddingHorizontal: spacing.lg }}
-            ListEmptyComponent={
-              <View style={{ paddingVertical: spacing.xl, alignItems: 'center' }}>
-                <Text style={styles.entryMeta}>Tidak ada hasil untuk “{query}”.</Text>
-                <Text style={[styles.entryMeta, { textAlign: 'center' }]}>
-                  Kalau ini produk kemasan, barcode-nya biasanya lebih cepat
-                  ketemu daripada namanya.
-                </Text>
-                <Button
-                  label="Pindai barcode"
-                  onPress={() => setScanning(true)}
-                  style={{ marginTop: spacing.md, alignSelf: 'stretch' }}
-                />
-              </View>
-            }
-            renderItem={({ item }) => (
-              <Pressable style={styles.resultRow} onPress={() => setSelected(item)}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.entryName}>{item.name}</Text>
-                  <Text style={styles.entryMeta}>
-                    {Math.round(item.kcal)} kkal / 100 {item.isLiquid ? 'ml' : 'g'}
-                    {item.servingLabel ? ` · ${item.servingLabel}` : ''}
-                  </Text>
-                </View>
-                <Text style={styles.addLink}>+</Text>
-              </Pressable>
-            )}
-          />
-        </>
-      )}
     </SafeAreaView>
   );
 }
 
-function PortionStep({
+function FoodRow({
   food,
-  busy,
-  error,
-  onSubmit,
+  onPress,
+  styles,
+  theme,
 }: {
   food: Food;
-  busy: boolean;
-  error: unknown;
-  onSubmit: (quantityG: number) => void;
+  onPress: () => void;
+  styles: ReturnType<typeof makeStyles>;
+  theme: Theme;
 }) {
+  return (
+    <Pressable style={styles.row} onPress={onPress} accessibilityRole="button">
+      <View style={[styles.rowIcon, { backgroundColor: CATEGORY_TINT[food.category] }]}>
+        <Text style={styles.tileEmoji}>{CATEGORY_EMOJI[food.category]}</Text>
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.rowName} numberOfLines={1}>
+          {food.name}
+        </Text>
+        <Text style={styles.rowMeta}>
+          {Math.round(food.kcal)} kal / 100 {food.isLiquid ? 'ml' : 'g'}
+          {food.servingLabel ? ` · ${food.servingLabel}` : ''}
+        </Text>
+      </View>
+      <PlusIcon color={theme.brand} size={18} weight={2.2} />
+    </Pressable>
+  );
+}
+
+/**
+ * Portion, then meal, then add.
+ *
+ * The meal is preselected from the clock rather than asked first: at 12:40
+ * almost nobody is logging breakfast, and a wrong default costs one tap while
+ * asking every time costs one tap always.
+ */
+function PortionSheet({
+  day,
+  timezone,
+  food,
+  onClose,
+}: {
+  day: string;
+  timezone: string;
+  food: Food;
+  onClose: () => void;
+}) {
+  const { theme } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+  const addFood = useAddFood(day);
+
+  const [meal, setMeal] = useState<MealType>(() =>
+    mealForHour(
+      Number(
+        new Intl.DateTimeFormat('en-GB', {
+          hour: '2-digit',
+          hour12: false,
+          timeZone: timezone,
+        }).format(new Date()),
+      ),
+    ),
+  );
   const [amount, setAmount] = useState(String(defaultPortionG(food)));
+
   const quantity = Number(amount);
   const valid = Number.isFinite(quantity) && quantity > 0 && quantity <= 5000;
   const preview = valid ? nutrientsForQuantity(food, quantity) : null;
@@ -328,147 +447,226 @@ function PortionStep({
     : [50, 100, 200];
 
   return (
-    <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }}>
-      <Text style={styles.entryName}>{food.name}</Text>
-      {food.servingLabel && food.servingG ? (
-        <Text style={styles.entryMeta}>
-          {food.servingLabel} ≈ {Math.round(food.servingG)} {unit}
-        </Text>
-      ) : null}
-
-      <TextInput
-        value={amount}
-        onChangeText={setAmount}
-        keyboardType="numeric"
-        style={styles.input}
-        accessibilityLabel={`Jumlah dalam ${unit}`}
-      />
-
-      <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-        {quick.map((value) => (
-          <Button
-            key={value}
-            label={`${value} ${unit}`}
-            variant="ghost"
-            onPress={() => setAmount(String(value))}
-            style={{ flex: 1 }}
-          />
-        ))}
+    <SafeAreaView style={styles.screen}>
+      <View style={styles.sheetHeader}>
+        <Text style={styles.sheetTitle}>Berapa porsinya?</Text>
+        <Pressable onPress={onClose} accessibilityRole="button">
+          <Text style={styles.link}>Tutup</Text>
+        </Pressable>
       </View>
 
-      {preview ? (
-        <View style={styles.previewBox}>
-          <PreviewCell label="Kalori" value={String(Math.round(preview.kcal))} />
-          <PreviewCell label="Protein" value={preview.proteinG.toFixed(1)} />
-          <PreviewCell label="Karbo" value={preview.carbsG.toFixed(1)} />
-          <PreviewCell label="Lemak" value={preview.fatG.toFixed(1)} />
+      <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg }}>
+        <View style={styles.foodHead}>
+          <View style={[styles.rowIcon, { backgroundColor: CATEGORY_TINT[food.category] }]}>
+            <Text style={styles.tileEmoji}>{CATEGORY_EMOJI[food.category]}</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.rowName}>{food.name}</Text>
+            {food.servingLabel && food.servingG ? (
+              <Text style={styles.rowMeta}>
+                {food.servingLabel} ≈ {Math.round(food.servingG)} {unit}
+              </Text>
+            ) : null}
+          </View>
         </View>
-      ) : null}
 
-      {error != null && <ErrorNote error={error} />}
+        <Segmented options={MEAL_OPTIONS} value={meal} onChange={setMeal} />
 
-      <Button
-        label="Tambahkan"
-        onPress={() => valid && onSubmit(quantity)}
-        disabled={!valid}
-        loading={busy}
-      />
-    </ScrollView>
+        <TextInput
+          value={amount}
+          onChangeText={setAmount}
+          keyboardType="numeric"
+          style={styles.input}
+          accessibilityLabel={`Jumlah dalam ${unit}`}
+        />
+
+        <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+          {quick.map((value) => (
+            <Button
+              key={value}
+              label={`${value} ${unit}`}
+              variant="ghost"
+              onPress={() => setAmount(String(value))}
+              style={{ flex: 1 }}
+            />
+          ))}
+        </View>
+
+        {preview ? (
+          <View style={styles.previewBox}>
+            <PreviewCell label="Kalori" value={String(Math.round(preview.kcal))} />
+            <PreviewCell label="Protein" value={preview.proteinG.toFixed(1)} />
+            <PreviewCell label="Karbo" value={preview.carbsG.toFixed(1)} />
+            <PreviewCell label="Lemak" value={preview.fatG.toFixed(1)} />
+          </View>
+        ) : null}
+
+        {addFood.error != null && <ErrorNote error={addFood.error} />}
+
+        <Button
+          label="Tambahkan"
+          onPress={() =>
+            valid &&
+            addFood.mutate(
+              { foodId: food.id, loggedOn: day, meal, quantityG: quantity },
+              { onSuccess: onClose },
+            )
+          }
+          disabled={!valid}
+          loading={addFood.isPending}
+          icon={<PlusIcon color={theme.onBrand} size={18} weight={2.4} />}
+        />
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 function PreviewCell({ label, value }: { label: string; value: string }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={{ flex: 1, alignItems: 'center' }}>
-      <Text style={styles.entryMeta}>{label}</Text>
-      <Text style={styles.entryName}>{value}</Text>
+      <Text style={styles.rowMeta}>{label}</Text>
+      <Text style={styles.rowName}>{value}</Text>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: theme.bg },
-  content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxl },
-  totalRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: spacing.md },
-  total: { color: theme.text, fontSize: 24, fontWeight: '700' },
-  totalTarget: { color: theme.textDim, fontSize: 13 },
-  splitBar: {
-    flexDirection: 'row',
-    height: 8,
-    borderRadius: 4,
-    overflow: 'hidden',
-    marginTop: spacing.md,
-  },
-  splitLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 },
-  splitText: { color: theme.textDim, fontSize: 11 },
-  mealHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  mealTitle: { color: theme.textMuted, fontSize: 13, fontWeight: '600' },
-  addLink: { color: theme.brand, fontSize: 14, fontWeight: '600' },
-  entryList: {
-    borderWidth: 1,
-    borderColor: theme.border,
-    borderRadius: radius.lg,
-    overflow: 'hidden',
-  },
-  entryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    padding: spacing.md,
-    backgroundColor: theme.surface,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: theme.border,
-  },
-  entryName: { color: theme.text, fontSize: 14, fontWeight: '600' },
-  entryMeta: { color: theme.textDim, fontSize: 12, marginTop: 2 },
-  entryKcal: { color: theme.textMuted, fontSize: 14 },
-  remove: { color: theme.textDim, fontSize: 20, paddingHorizontal: 4 },
-  sheet: { flex: 1, backgroundColor: theme.bg },
-  sheetHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.border,
-  },
-  sheetTitle: { color: theme.text, fontSize: 16, fontWeight: '600' },
-  searchRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    alignItems: 'center',
-    margin: spacing.lg,
-  },
-  scanButton: {
-    borderWidth: 1,
-    borderColor: theme.border,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 12,
-  },
-  input: {
-    backgroundColor: theme.surface,
-    borderColor: theme.border,
-    borderWidth: 1,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 12,
-    color: theme.text,
-    fontSize: 15,
-  },
-  resultRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: theme.border,
-  },
-  previewBox: {
-    flexDirection: 'row',
-    backgroundColor: theme.surface,
-    borderColor: theme.border,
-    borderWidth: 1,
-    borderRadius: radius.lg,
-    padding: spacing.md,
-  },
-});
+const makeStyles = (theme: Theme) =>
+  StyleSheet.create({
+    screen: { flex: 1, backgroundColor: theme.bg },
+    content: {
+      padding: spacing.lg,
+      gap: spacing.lg,
+      paddingBottom: spacing.xxl * 2,
+    },
+    title: { color: theme.text, fontSize: 22, fontWeight: '700' },
+    subtitle: { color: theme.textMuted, fontSize: 13, marginTop: -spacing.sm },
+    searchRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      backgroundColor: theme.surface,
+      borderColor: theme.border,
+      borderWidth: 1,
+      borderRadius: radius.lg,
+      paddingHorizontal: spacing.md,
+    },
+    searchInput: {
+      flex: 1,
+      paddingVertical: 13,
+      color: theme.text,
+      fontSize: 15,
+    },
+    sectionTitle: { color: theme.text, fontSize: 15, fontWeight: '700' },
+    browseHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: spacing.sm,
+    },
+    link: { color: theme.brand, fontSize: 14, fontWeight: '600' },
+    grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+    tile: {
+      // Three per row: (100% - 2 gaps) / 3, expressed as a fraction so it
+      // survives a wider phone without a media query.
+      width: '30.5%',
+      alignItems: 'center',
+      gap: 8,
+      paddingVertical: spacing.md,
+      backgroundColor: theme.surface,
+      borderColor: theme.border,
+      borderWidth: 1,
+      borderRadius: radius.lg,
+    },
+    tilePressed: { opacity: 0.7 },
+    tileIcon: {
+      width: 44,
+      height: 44,
+      borderRadius: radius.pill,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    tileEmoji: { fontSize: 20 },
+    tileLabel: {
+      color: theme.text,
+      fontSize: 11,
+      fontWeight: '600',
+      textAlign: 'center',
+      paddingHorizontal: 4,
+    },
+    list: {
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: radius.lg,
+      overflow: 'hidden',
+    },
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      padding: spacing.md,
+      backgroundColor: theme.surface,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: theme.border,
+    },
+    rowIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: radius.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    rowName: { color: theme.text, fontSize: 14, fontWeight: '600' },
+    rowMeta: { color: theme.textDim, fontSize: 12, marginTop: 2 },
+    rowKcal: { color: theme.textMuted, fontSize: 14, fontWeight: '600' },
+    remove: { color: theme.textDim, fontSize: 20, paddingHorizontal: 4 },
+    totalRow: {
+      flexDirection: 'row',
+      alignItems: 'baseline',
+      justifyContent: 'space-between',
+      marginBottom: spacing.md,
+    },
+    total: { color: theme.text, fontSize: 24, fontWeight: '700' },
+    totalTarget: { color: theme.textDim, fontSize: 13 },
+    splitBar: {
+      flexDirection: 'row',
+      height: 8,
+      borderRadius: 4,
+      overflow: 'hidden',
+      marginTop: spacing.md,
+    },
+    splitLabels: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginTop: 6,
+    },
+    splitText: { color: theme.textDim, fontSize: 11 },
+    sheetHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: spacing.lg,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    sheetTitle: { color: theme.text, fontSize: 16, fontWeight: '700' },
+    foodHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+    input: {
+      backgroundColor: theme.surface,
+      borderColor: theme.border,
+      borderWidth: 1,
+      borderRadius: radius.md,
+      paddingHorizontal: spacing.md,
+      paddingVertical: 12,
+      color: theme.text,
+      fontSize: 15,
+    },
+    previewBox: {
+      flexDirection: 'row',
+      backgroundColor: theme.surface,
+      borderColor: theme.border,
+      borderWidth: 1,
+      borderRadius: radius.lg,
+      padding: spacing.md,
+    },
+  });

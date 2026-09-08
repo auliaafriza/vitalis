@@ -1,7 +1,59 @@
-import type { ActivityLevel, Goal, MealType, Sex } from './types';
+import type { ActivityLevel, FoodCategory, Goal, MealType, Sex } from './types';
 import type { BmiCategory } from './health';
 
 /** Indonesian display labels, kept beside the domain so both apps agree. */
+
+export const CATEGORY_LABEL: Record<FoodCategory, string> = {
+  main: 'Makanan Utama',
+  snack: 'Camilan',
+  drink: 'Minuman',
+  fruit: 'Buah',
+  vegetable: 'Sayur',
+  packaged: 'Makanan Kemasan',
+  other: 'Bumbu & Lainnya',
+};
+
+export const CATEGORY_EMOJI: Record<FoodCategory, string> = {
+  main: '🍛',
+  snack: '🍪',
+  drink: '🥤',
+  fruit: '🍊',
+  vegetable: '🥬',
+  packaged: '🥫',
+  other: '🧂',
+};
+
+/**
+ * The tint behind each category tile.
+ *
+ * Deliberately soft: these sit behind an emoji, so they have to read as a
+ * background at a glance and never compete with the food itself. Given as hex
+ * rather than a CSS variable because React Native needs a literal, and the two
+ * apps must show the same colour.
+ */
+export const CATEGORY_TINT: Record<FoodCategory, string> = {
+  main: '#FDEBD2',
+  snack: '#FBDDD5',
+  drink: '#D6E9F8',
+  fruit: '#FCEFC7',
+  vegetable: '#D9EFD6',
+  packaged: '#F8DAD5',
+  other: '#E7E4DC',
+};
+
+/**
+ * The six tiles the browse grid shows, in the order they appear.
+ * 'other' is excluded on purpose — it is a real category that shows up in
+ * search results, just not one worth a tile of its own.
+ */
+export const FEATURED_CATEGORIES: readonly FoodCategory[] = [
+  'main',
+  'snack',
+  'drink',
+  'fruit',
+  'vegetable',
+  'packaged',
+] as const;
 
 export const MEAL_LABEL: Record<MealType, string> = {
   breakfast: 'Sarapan',

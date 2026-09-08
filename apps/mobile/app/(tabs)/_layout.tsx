@@ -1,59 +1,27 @@
 import { Tabs } from 'expo-router';
-import { Text, type ColorValue } from 'react-native';
-import { theme } from '../../src/lib/theme';
+import { TabBar } from '../../src/components/tab-bar';
+import { useTheme } from '../../src/lib/theme';
 
 /**
- * Emoji tab icons keep the app dependency-free at this stage. Swapping in an
- * icon set later is a change to this file only.
+ * The header is hidden on every tab: each screen draws its own, because the
+ * designs put controls (a date stepper, a search field) on the same line as
+ * the title and a stock navigation header cannot hold those.
  */
-function TabIcon({ glyph, color }: { glyph: string; color: ColorValue }) {
-  return <Text style={{ fontSize: 20, color }}>{glyph}</Text>;
-}
-
 export default function TabsLayout() {
+  const { theme } = useTheme();
+
   return (
     <Tabs
+      tabBar={(props) => <TabBar {...props} />}
       screenOptions={{
-        headerStyle: { backgroundColor: theme.bg },
-        headerTitleStyle: { color: theme.text },
-        headerShadowVisible: false,
-        tabBarStyle: {
-          backgroundColor: theme.bg,
-          borderTopColor: theme.border,
-        },
-        tabBarActiveTintColor: theme.brand,
-        tabBarInactiveTintColor: theme.textDim,
+        headerShown: false,
         sceneStyle: { backgroundColor: theme.bg },
       }}
     >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Beranda',
-          tabBarIcon: ({ color }) => <TabIcon glyph="◎" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="nutrition"
-        options={{
-          title: 'Nutrisi',
-          tabBarIcon: ({ color }) => <TabIcon glyph="🍽" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="health"
-        options={{
-          title: 'Kesehatan',
-          tabBarIcon: ({ color }) => <TabIcon glyph="♡" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="trends"
-        options={{
-          title: 'Tren',
-          tabBarIcon: ({ color }) => <TabIcon glyph="📈" color={color} />,
-        }}
-      />
+      <Tabs.Screen name="index" options={{ title: 'Beranda' }} />
+      <Tabs.Screen name="nutrition" options={{ title: 'Catat' }} />
+      <Tabs.Screen name="trends" options={{ title: 'Progress' }} />
+      <Tabs.Screen name="health" options={{ title: 'Kesehatan' }} />
     </Tabs>
   );
 }

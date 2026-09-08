@@ -16,7 +16,7 @@
     "dev:mobile": "npm run start -w @calorya/mobile",
     "db:reset": "supabase db reset",
     "db:types": "supabase gen types typescript --local > packages/api/src/database.types.ts",
-    "db:test": "psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f supabase/tests/rls_and_triggers.sql"
+    "db:test": "psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f supabase/tests/rls_and_triggers.sql -f supabase/tests/entitlements.sql -f supabase/tests/paywall_switch.sql"
   },
   "devDependencies": {
     "typescript": "^5.9.3"

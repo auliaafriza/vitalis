@@ -9,7 +9,15 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
-import { radius, spacing, theme } from '../lib/theme';
+import Svg, { Circle } from 'react-native-svg';
+import { EyeIcon, EyeOffIcon } from './icons';
+import {
+  radius,
+  spacing,
+  useTheme,
+  useThemedStyles,
+  type Theme,
+} from '../lib/theme';
 
 export function Card({
   children,
@@ -18,11 +26,25 @@ export function Card({
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
 }) {
+  const styles = useThemedStyles(makeStyles);
   return <View style={[styles.card, style]}>{children}</View>;
 }
 
-export function SectionTitle({ children }: { children: ReactNode }) {
-  return <Text style={styles.sectionTitle}>{children}</Text>;
+export function SectionTitle({
+  children,
+  action,
+}: {
+  children: ReactNode;
+  action?: ReactNode;
+}) {
+  const styles = useThemedStyles(makeStyles);
+  if (!action) return <Text style={styles.sectionTitle}>{children}</Text>;
+  return (
+    <View style={styles.sectionRow}>
+      <Text style={styles.sectionTitle}>{children}</Text>
+      {action}
+    </View>
+  );
 }
 
 export function Button({
@@ -31,6 +53,7 @@ export function Button({
   variant = 'primary',
   disabled,
   loading,
+  icon,
   style,
 }: {
   label: string;
@@ -38,9 +61,13 @@ export function Button({
   variant?: 'primary' | 'ghost';
   disabled?: boolean;
   loading?: boolean;
+  icon?: ReactNode;
   style?: StyleProp<ViewStyle>;
 }) {
+  const { theme } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const isPrimary = variant === 'primary';
+
   return (
     <Pressable
       accessibilityRole="button"
@@ -56,47 +83,176 @@ export function Button({
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={isPrimary ? theme.bg : theme.text} />
+        <ActivityIndicator color={isPrimary ? theme.onBrand : theme.text} />
       ) : (
-        <Text style={isPrimary ? styles.buttonTextPrimary : styles.buttonTextGhost}>
-          {label}
-        </Text>
+        <>
+          {icon}
+          <Text style={isPrimary ? styles.buttonTextPrimary : styles.buttonTextGhost}>
+            {label}
+          </Text>
+        </>
       )}
     </Pressable>
   );
 }
 
 /**
- * Progress bar. React Native has no SVG in the default runtime, so the ring
- * from the web app becomes a bar here rather than pulling in another native
- * dependency for a decorative shape.
+ * The calorie ring.
+ *
+ * Drawn with SVG rather than the two-rotated-half-circles View trick: the View
+ * version has to know the colour behind it to mask the remaining arc, which
+ * quietly breaks the moment the ring is placed on anything but a flat card —
+ * and it breaks in a way that only shows up on one theme.
+ *
+ * The arc starts at twelve o'clock because that is where people expect a dial
+ * to start; SVG starts at three, hence the -90° rotation.
  */
+export function Ring({
+  size = 168,
+  stroke = 14,
+  progress,
+  color,
+  trackColor,
+  children,
+}: {
+  size?: number;
+  stroke?: number;
+  progress: number;
+  color: string;
+  trackColor?: string;
+  children?: ReactNode;
+}) {
+  const { theme } = useTheme();
+  const r = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * r;
+  const clamped = Math.max(0, Math.min(1, progress));
+
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          stroke={trackColor ?? theme.surfaceAlt}
+          strokeWidth={stroke}
+          fill="none"
+        />
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          stroke={color}
+          strokeWidth={stroke}
+          fill="none"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={circumference * (1 - clamped)}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        />
+      </Svg>
+      <View style={{ alignItems: 'center' }}>{children}</View>
+    </View>
+  );
+}
+
 export function ProgressBar({
   value,
   max,
   color,
   label,
+  height = 6,
 }: {
   value: number;
   max: number;
   color: string;
   label: string;
+  height?: number;
 }) {
+  const { theme } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const ratio = max > 0 ? Math.min(1, Math.max(0, value / max)) : 0;
   const over = max > 0 && value > max;
+
   return (
     <View
       accessibilityRole="progressbar"
       accessibilityLabel={label}
       accessibilityValue={{ min: 0, max: Math.round(max), now: Math.round(value) }}
-      style={styles.progressTrack}
+      style={[styles.progressTrack, { height, borderRadius: height / 2 }]}
     >
       <View
-        style={[
-          styles.progressFill,
-          { width: `${ratio * 100}%`, backgroundColor: over ? theme.body : color },
-        ]}
+        style={{
+          height: '100%',
+          borderRadius: height / 2,
+          width: `${ratio * 100}%`,
+          backgroundColor: over ? theme.body : color,
+        }}
       />
+    </View>
+  );
+}
+
+/** One macro under the ring: name, bar, "150 / 250g". */
+export function MacroBar({
+  label,
+  value,
+  target,
+  color,
+  unit = 'g',
+}: {
+  label: string;
+  value: number;
+  target: number;
+  color: string;
+  unit?: string;
+}) {
+  const styles = useThemedStyles(makeStyles);
+  return (
+    <View style={styles.macro}>
+      <Text style={styles.macroLabel}>{label}</Text>
+      <ProgressBar value={value} max={target} color={color} label={label} height={5} />
+      <Text style={styles.macroValue}>
+        {Math.round(value)}
+        <Text style={styles.macroTarget}>
+          {' '}
+          / {Math.round(target)}
+          {unit}
+        </Text>
+      </Text>
+    </View>
+  );
+}
+
+/** The pill row on Progress: Kalori · Berat Badan · Nutrisi. */
+export function Segmented<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: readonly { value: T; label: string }[];
+  value: T;
+  onChange: (next: T) => void;
+}) {
+  const styles = useThemedStyles(makeStyles);
+  return (
+    <View style={styles.segmented}>
+      {options.map((option) => {
+        const active = option.value === value;
+        return (
+          <Pressable
+            key={option.value}
+            onPress={() => onChange(option.value)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
+            style={[styles.segment, active && styles.segmentActive]}
+          >
+            <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
+              {option.label}
+            </Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -106,7 +262,7 @@ export function StatTile({
   value,
   unit,
   hint,
-  accent = theme.brand,
+  accent,
 }: {
   label: string;
   value: string;
@@ -114,10 +270,12 @@ export function StatTile({
   hint?: string;
   accent?: string;
 }) {
+  const { theme } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.tile}>
       <View style={styles.tileHeader}>
-        <View style={[styles.dot, { backgroundColor: accent }]} />
+        <View style={[styles.dot, { backgroundColor: accent ?? theme.brand }]} />
         <Text style={styles.tileLabel}>{label}</Text>
       </View>
       <Text style={styles.tileValue}>
@@ -129,137 +287,6 @@ export function StatTile({
   );
 }
 
-export function EmptyState({ title, description }: { title: string; description: string }) {
-  return (
-    <View style={styles.empty}>
-      <Text style={styles.emptyTitle}>{title}</Text>
-      <Text style={styles.emptyBody}>{description}</Text>
-    </View>
-  );
-}
-
-export function ErrorNote({ error }: { error: unknown }) {
-  const message =
-    error instanceof Error ? error.message : 'Terjadi kesalahan yang tidak diketahui.';
-  return (
-    <View style={styles.errorBox}>
-      <Text style={styles.errorText}>{message}</Text>
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: theme.surface,
-    borderColor: theme.border,
-    borderWidth: 1,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-  },
-  sectionTitle: {
-    color: theme.textMuted,
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-    marginBottom: spacing.md,
-  },
-  button: {
-    borderRadius: radius.md,
-    paddingVertical: 14,
-    paddingHorizontal: spacing.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  buttonPrimary: { backgroundColor: theme.brand },
-  buttonGhost: { borderWidth: 1, borderColor: theme.border },
-  buttonDisabled: { opacity: 0.5 },
-  buttonPressed: { opacity: 0.8 },
-  buttonTextPrimary: { color: theme.bg, fontWeight: '600', fontSize: 15 },
-  buttonTextGhost: { color: theme.text, fontWeight: '600', fontSize: 15 },
-  progressTrack: {
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: theme.surfaceAlt,
-    overflow: 'hidden',
-  },
-  progressFill: { height: '100%', borderRadius: 4 },
-  tile: {
-    flex: 1,
-    minWidth: '46%',
-    backgroundColor: theme.surface,
-    borderColor: theme.border,
-    borderWidth: 1,
-    borderRadius: radius.lg,
-    padding: spacing.md,
-  },
-  tileHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  dot: { width: 8, height: 8, borderRadius: 4 },
-  tileLabel: { color: theme.textDim, fontSize: 12, fontWeight: '500' },
-  tileValue: { color: theme.text, fontSize: 20, fontWeight: '700', marginTop: 6 },
-  tileUnit: { color: theme.textDim, fontSize: 13, fontWeight: '400' },
-  tileHint: { color: theme.textDim, fontSize: 11, marginTop: 2 },
-  empty: {
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: theme.border,
-    borderRadius: radius.lg,
-    padding: spacing.xl,
-    alignItems: 'center',
-  },
-  emptyTitle: { color: theme.textMuted, fontWeight: '600' },
-  emptyBody: {
-    color: theme.textDim,
-    fontSize: 13,
-    textAlign: 'center',
-    marginTop: 4,
-  },
-  errorBox: {
-    backgroundColor: 'rgba(240,122,140,0.12)',
-    borderColor: 'rgba(240,122,140,0.35)',
-    borderWidth: 1,
-    borderRadius: radius.md,
-    padding: spacing.md,
-  },
-  errorText: { color: theme.danger, fontSize: 13 },
-
-  passwordWrap: { position: 'relative', justifyContent: 'center' },
-  passwordInput: {
-    backgroundColor: theme.bg,
-    borderColor: theme.border,
-    borderWidth: 1,
-    borderRadius: radius.md,
-    paddingLeft: spacing.md,
-    paddingRight: 48,
-    paddingVertical: 12,
-    color: theme.text,
-    fontSize: 15,
-  },
-  passwordToggle: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    bottom: 0,
-    width: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  passwordEye: { fontSize: 17 },
-  // React Native has no SVG in the core runtime, so the "hidden" state is the
-  // eye glyph with a rotated 2px View laid over it. No native dependency, and
-  // therefore no new build required to ship it.
-  passwordSlash: {
-    position: 'absolute',
-    left: -3,
-    right: -3,
-    top: '46%',
-    height: 2,
-    borderRadius: 1,
-    backgroundColor: theme.text,
-    transform: [{ rotate: '-45deg' }],
-  },
-});
-
 /**
  * Password field with a show/hide toggle.
  *
@@ -269,6 +296,10 @@ const styles = StyleSheet.create({
  * autoCorrect / spellCheck are off because Android can attach the keyboard
  * suggestion strip to a field once secureTextEntry is flipped off, which
  * would offer to "learn" the password.
+ *
+ * The eye is an SVG icon rather than the 👁 emoji it used to be: an emoji
+ * takes the platform's own glyph and colour, so it stayed dark on the dark
+ * theme and looked like a different app on iOS than on Android.
  */
 export function PasswordInput({
   value,
@@ -281,6 +312,8 @@ export function PasswordInput({
   placeholder?: string;
   autoComplete?: 'current-password' | 'new-password';
 }) {
+  const { theme } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [visible, setVisible] = useState(false);
 
   return (
@@ -302,16 +335,163 @@ export function PasswordInput({
         hitSlop={8}
         accessibilityRole="button"
         accessibilityState={{ selected: visible }}
-        accessibilityLabel={
-          visible ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'
-        }
+        accessibilityLabel={visible ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'}
         style={styles.passwordToggle}
       >
-        <View>
-          <Text style={styles.passwordEye}>{'\u{1F441}'}</Text>
-          {visible ? <View style={styles.passwordSlash} /> : null}
-        </View>
+        {visible ? (
+          <EyeOffIcon color={theme.textMuted} size={20} weight={1.8} />
+        ) : (
+          <EyeIcon color={theme.textMuted} size={20} weight={1.8} />
+        )}
       </Pressable>
     </View>
   );
 }
+
+export function EmptyState({ title, description }: { title: string; description: string }) {
+  const styles = useThemedStyles(makeStyles);
+  return (
+    <View style={styles.empty}>
+      <Text style={styles.emptyTitle}>{title}</Text>
+      <Text style={styles.emptyBody}>{description}</Text>
+    </View>
+  );
+}
+
+export function ErrorNote({ error }: { error: unknown }) {
+  const styles = useThemedStyles(makeStyles);
+  const message =
+    error instanceof Error ? error.message : 'Terjadi kesalahan yang tidak diketahui.';
+  return (
+    <View style={styles.errorBox}>
+      <Text style={styles.errorText}>{message}</Text>
+    </View>
+  );
+}
+
+const makeStyles = (theme: Theme) =>
+  StyleSheet.create({
+    card: {
+      backgroundColor: theme.surface,
+      borderColor: theme.border,
+      borderWidth: 1,
+      borderRadius: radius.xl,
+      padding: spacing.lg,
+      // Elevation is theme-dependent: on the dark palette shadowOpacity is 0
+      // and the border does the separating instead.
+      shadowColor: '#16241c',
+      shadowOpacity: theme.shadowOpacity,
+      shadowRadius: 16,
+      shadowOffset: { width: 0, height: 6 },
+      elevation: theme.shadowOpacity > 0 ? 2 : 0,
+    },
+    sectionRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: spacing.sm,
+    },
+    sectionTitle: {
+      color: theme.textMuted,
+      fontSize: 12,
+      fontWeight: '600',
+      letterSpacing: 0.6,
+      textTransform: 'uppercase',
+      marginBottom: spacing.md,
+    },
+    button: {
+      flexDirection: 'row',
+      gap: spacing.sm,
+      borderRadius: radius.lg,
+      paddingVertical: 14,
+      paddingHorizontal: spacing.lg,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    buttonPrimary: { backgroundColor: theme.brand },
+    buttonGhost: { borderWidth: 1, borderColor: theme.border },
+    buttonDisabled: { opacity: 0.5 },
+    buttonPressed: { opacity: 0.85 },
+    buttonTextPrimary: { color: theme.onBrand, fontWeight: '700', fontSize: 15 },
+    buttonTextGhost: { color: theme.text, fontWeight: '600', fontSize: 15 },
+    progressTrack: {
+      backgroundColor: theme.surfaceAlt,
+      overflow: 'hidden',
+      width: '100%',
+    },
+    macro: { flex: 1, gap: 6 },
+    macroLabel: { color: theme.textDim, fontSize: 11, fontWeight: '600' },
+    macroValue: { color: theme.text, fontSize: 12, fontWeight: '700' },
+    macroTarget: { color: theme.textDim, fontWeight: '400' },
+    segmented: {
+      flexDirection: 'row',
+      gap: 4,
+      backgroundColor: theme.surfaceAlt,
+      borderRadius: radius.pill,
+      padding: 4,
+    },
+    segment: {
+      flex: 1,
+      paddingVertical: 8,
+      borderRadius: radius.pill,
+      alignItems: 'center',
+    },
+    segmentActive: { backgroundColor: theme.surface },
+    segmentText: { color: theme.textDim, fontSize: 12, fontWeight: '600' },
+    segmentTextActive: { color: theme.text },
+    tile: {
+      flex: 1,
+      minWidth: '46%',
+      backgroundColor: theme.surface,
+      borderColor: theme.border,
+      borderWidth: 1,
+      borderRadius: radius.lg,
+      padding: spacing.md,
+    },
+    tileHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    dot: { width: 8, height: 8, borderRadius: 4 },
+    tileLabel: { color: theme.textDim, fontSize: 12, fontWeight: '500' },
+    tileValue: { color: theme.text, fontSize: 20, fontWeight: '700', marginTop: 6 },
+    tileUnit: { color: theme.textDim, fontSize: 13, fontWeight: '400' },
+    tileHint: { color: theme.textDim, fontSize: 11, marginTop: 2 },
+    empty: {
+      borderWidth: 1,
+      borderStyle: 'dashed',
+      borderColor: theme.border,
+      borderRadius: radius.lg,
+      padding: spacing.xl,
+      alignItems: 'center',
+    },
+    emptyTitle: { color: theme.textMuted, fontWeight: '600' },
+    emptyBody: {
+      color: theme.textDim,
+      fontSize: 13,
+      textAlign: 'center',
+      marginTop: 4,
+    },
+    passwordWrap: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.surface,
+      borderColor: theme.border,
+      borderWidth: 1,
+      borderRadius: radius.md,
+      paddingRight: spacing.md,
+    },
+    passwordInput: {
+      flex: 1,
+      paddingHorizontal: spacing.md,
+      paddingVertical: 12,
+      color: theme.text,
+      fontSize: 15,
+    },
+    passwordToggle: { padding: 4 },
+    errorBox: {
+      backgroundColor: theme.brandSoft,
+      borderColor: theme.danger,
+      borderWidth: 1,
+      borderRadius: radius.md,
+      padding: spacing.md,
+    },
+    errorText: { color: theme.danger, fontSize: 13 },
+  });

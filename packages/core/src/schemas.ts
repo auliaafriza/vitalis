@@ -119,6 +119,9 @@ export const foodSchema = z.object({
   servingLabel: z.string().trim().max(40).nullable().optional(),
   servingG: z.coerce.number().positive().max(5000).nullable().optional(),
   isLiquid: z.boolean().default(false),
+  category: z
+    .enum(['main', 'snack', 'drink', 'fruit', 'vegetable', 'packaged', 'other'])
+    .optional(),
 });
 export type FoodInput = z.infer<typeof foodSchema>;
 

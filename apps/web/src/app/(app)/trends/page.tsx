@@ -1,14 +1,22 @@
 'use client';
 
 import {
+  clampRange,
+  daySummariesToCsv,
+  exportFilename,
   fillDays,
+  foodEntriesToCsv,
   formatDuration,
   formatShortDay,
   formatWeight,
+  isRangeAllowed,
   lastNDays,
+  limitsFor,
   linearTrend,
   movingAverage,
+  TREND_RANGES,
 } from '@calorya/core';
+import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import {
   Area,
@@ -24,38 +32,100 @@ import {
   YAxis,
 } from 'recharts';
 import {
+  Button,
   Card,
   EmptyState,
   ErrorNote,
   SectionTitle,
+  Segmented,
   Skeleton,
   StatTile,
 } from '@/components/ui';
-import { useDaySummaries, useProfile, useTargets, useWeights } from '@/lib/hooks';
+import {
+  useAllDaySummaries,
+  useDaySummaries,
+  useFoodEntriesRange,
+  useProfile,
+  useTargets,
+  useTier,
+  useWeights,
+} from '@/lib/hooks';
 import { useDay } from '@/lib/use-day';
+import { downloadText } from '@/lib/download';
+import { LockIcon, UpgradeCard } from '@/components/upgrade';
 
-const RANGES = [
-  { days: 7, label: '7 hari' },
-  { days: 30, label: '30 hari' },
-  { days: 90, label: '90 hari' },
+const VIEWS = [
+  { value: 'kalori', label: 'Kalori' },
+  { value: 'berat', label: 'Berat Badan' },
+  { value: 'nutrisi', label: 'Nutrisi' },
 ] as const;
+
+type ViewKey = (typeof VIEWS)[number]['value'];
 
 export default function TrendsPage() {
   const { data: profile } = useProfile();
   const day = useDay(profile?.timezone);
-  const [range, setRange] = useState<number>(30);
+  const { data: tier } = useTier();
+  const limits = limitsFor(tier);
 
-  const days = useMemo(() => lastNDays(range, day.today), [range, day.today]);
+  const [requested, setRequested] = useState<number | null>(7);
+  const [upsell, setUpsell] = useState<string | null>(null);
+  const [view, setView] = useState<ViewKey>('kalori');
+
+  /**
+   * Clamped, not merely validated. If a subscription lapses while the user is
+   * looking at a year of data, they drop to 7 days instead of staring at an
+   * empty chart wondering what broke.
+   */
+  const range = clampRange(tier, requested);
+  const allHistory = range === null;
+
+  const days = useMemo(
+    () => (allHistory ? [] : lastNDays(range ?? 7, day.today)),
+    [allHistory, range, day.today],
+  );
   const from = days[0] ?? day.today;
 
-  const { data: summaries, isLoading, error } = useDaySummaries(from, day.today);
-  const { data: weights } = useWeights(from, day.today);
+  const windowed = useDaySummaries(from, day.today);
+  const everything = useAllDaySummaries(allHistory);
+  const summaries = allHistory ? everything.data : windowed.data;
+  const isLoading = allHistory ? everything.isLoading : windowed.isLoading;
+  const error = allHistory ? everything.error : windowed.error;
+
+  const { data: weights } = useWeights(allHistory ? '1900-01-01' : from, day.today);
   const { data: targets } = useTargets(day.today);
 
-  const series = useMemo(
-    () => fillDays(summaries ?? [], days),
-    [summaries, days],
+  // With all history the axis is whatever exists, not a fixed-length window.
+  const axis = useMemo(
+    () => (allHistory ? (summaries ?? []).map((s) => s.loggedOn) : days),
+    [allHistory, summaries, days],
   );
+
+  const series = useMemo(
+    () => fillDays(summaries ?? [], axis),
+    [summaries, axis],
+  );
+
+  const exportFrom = series[0]?.loggedOn ?? day.today;
+  const { data: entriesForExport } = useFoodEntriesRange(
+    exportFrom,
+    day.today,
+    limits.canExport,
+  );
+
+  function exportDaily() {
+    downloadText(
+      exportFilename('harian', exportFrom, day.today),
+      daySummariesToCsv(series),
+    );
+  }
+
+  function exportEntries() {
+    downloadText(
+      exportFilename('rincian', exportFrom, day.today),
+      foodEntriesToCsv(entriesForExport ?? []),
+    );
+  }
 
   /**
    * Weight is noisy day to day, so the chart shows the raw points faintly and
@@ -91,6 +161,9 @@ export default function TrendsPage() {
     return {
       kcal: Math.round(mean(withFood.map((s) => s.kcal))),
       protein: Math.round(mean(withFood.map((s) => s.proteinG))),
+      carbs: Math.round(mean(withFood.map((s) => s.carbsG))),
+      fat: Math.round(mean(withFood.map((s) => s.fatG))),
+      fiber: Math.round(mean(withFood.map((s) => s.fiberG))),
       water: Math.round(mean(series.map((s) => s.waterMl))),
       sleep: Math.round(mean(withSleep.map((s) => s.sleepMin ?? 0))),
       steps: Math.round(mean(withSteps.map((s) => s.steps ?? 0))),
@@ -110,26 +183,72 @@ export default function TrendsPage() {
 
   return (
     <div className="space-y-5">
-      <header className="flex items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">Tren</h1>
-        <div className="flex gap-1 rounded-xl border border-ink-800 p-1">
-          {RANGES.map((option) => (
-            <button
-              key={option.days}
-              type="button"
-              onClick={() => setRange(option.days)}
-              aria-pressed={range === option.days}
-              className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
-                range === option.days
-                  ? 'bg-ink-800 text-ink-100'
-                  : 'text-ink-500 hover:text-ink-300'
-              }`}
-            >
-              {option.label}
-            </button>
-          ))}
+      <header className="space-y-3">
+        <div>
+          <h1 className="text-xl font-semibold">Progress</h1>
+          <p className="mt-1 text-sm text-ink-500">
+            Pantau perkembanganmu dari waktu ke waktu.
+          </p>
+        </div>
+
+        <Segmented
+          label="Ukuran yang ditampilkan"
+          options={VIEWS}
+          value={view}
+          onChange={setView}
+        />
+
+        {/*
+          Locked ranges stay visible and clickable. Hiding them would make the
+          free plan feel complete and premium invisible; showing a padlock that
+          explains itself is both more honest and more persuasive.
+        */}
+        <div
+          role="group"
+          aria-label="Rentang waktu"
+          className="flex flex-wrap gap-1 rounded-xl border border-ink-800 p-1"
+        >
+          {TREND_RANGES.map((option) => {
+            const key = option.days === null ? 'all' : String(option.days);
+            const allowed = isRangeAllowed(tier, option.days);
+            const active = allowed && range === option.days;
+
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => {
+                  if (allowed) {
+                    setRequested(option.days);
+                    setUpsell(null);
+                  } else {
+                    setUpsell(option.label);
+                  }
+                }}
+                aria-pressed={active}
+                className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                  active
+                    ? 'bg-ink-800 text-ink-100'
+                    : allowed
+                      ? 'text-ink-500 hover:text-ink-300'
+                      : 'text-ink-500/70 hover:text-ink-300'
+                }`}
+              >
+                {!allowed && <LockIcon />}
+                {option.label}
+              </button>
+            );
+          })}
         </div>
       </header>
+
+      {upsell && (
+        <UpgradeCard
+          title={`Lihat tren ${upsell.toLowerCase()}`}
+          description="Paket gratis menyimpan grafik 7 hari terakhir. Premium membuka 30, 90, 365 hari, dan seluruh riwayatmu."
+          onDismiss={() => setUpsell(null)}
+        />
+      )}
 
       {isLoading ? (
         <div className="space-y-3">
@@ -171,6 +290,7 @@ export default function TrendsPage() {
             />
           </div>
 
+          {view === 'berat' && (
           <Card>
             <SectionTitle
               action={
@@ -247,7 +367,9 @@ export default function TrendsPage() {
               </p>
             )}
           </Card>
+          )}
 
+          {view === 'kalori' && (
           <Card>
             <SectionTitle>Kalori harian</SectionTitle>
             <ResponsiveContainer width="100%" height={200}>
@@ -289,7 +411,9 @@ export default function TrendsPage() {
               </BarChart>
             </ResponsiveContainer>
           </Card>
+          )}
 
+          {view === 'kalori' && (
           <Card>
             <SectionTitle>Tidur (jam)</SectionTitle>
             <ResponsiveContainer width="100%" height={180}>
@@ -326,8 +450,83 @@ export default function TrendsPage() {
               </BarChart>
             </ResponsiveContainer>
           </Card>
+          )}
+
+          {view === 'nutrisi' && (
+            <Card>
+              <SectionTitle>Rata-rata nutrisi harian</SectionTitle>
+              <div className="grid grid-cols-2 gap-3">
+                <StatTile
+                  label="Protein"
+                  value={String(averages.protein)}
+                  unit="g"
+                  accent="var(--color-body)"
+                />
+                <StatTile
+                  label="Karbohidrat"
+                  value={String(averages.carbs)}
+                  unit="g"
+                  accent="var(--color-move)"
+                />
+                <StatTile
+                  label="Lemak"
+                  value={String(averages.fat)}
+                  unit="g"
+                  accent="var(--color-sleep)"
+                />
+                <StatTile
+                  label="Serat"
+                  value={String(averages.fiber)}
+                  unit="g"
+                  accent="var(--color-food)"
+                />
+              </div>
+            </Card>
+          )}
         </>
       )}
+
+      <Card>
+        <SectionTitle>Ekspor</SectionTitle>
+        {limits.canExport ? (
+          <div className="space-y-3">
+            <p className="text-sm text-ink-500">
+              Rentang aktif: {exportFrom} sampai {day.today}.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="ghost" onClick={exportDaily}>
+                CSV ringkasan harian
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={exportEntries}
+                disabled={!entriesForExport}
+              >
+                CSV rincian makanan
+              </Button>
+              <Link
+                href={{
+                  pathname: '/laporan',
+                  query: { from: exportFrom, to: day.today },
+                }}
+                className="inline-flex items-center rounded-xl border border-ink-800 px-4 py-2 text-sm font-medium text-ink-300 hover:text-ink-100"
+              >
+                Laporan PDF
+              </Link>
+            </div>
+            <p className="text-xs text-ink-500">
+              Laporan PDF terbuka sebagai halaman cetak — pilih “Simpan sebagai PDF”
+              di dialog cetak browser.
+            </p>
+          </div>
+        ) : (
+          <UpgradeCard
+            title="Ekspor CSV & laporan PDF"
+            description="Bawa catatanmu ke dokter, ahli gizi, atau pelatih dalam satu berkas rapi."
+          />
+        )}
+      </Card>
     </div>
   );
 }

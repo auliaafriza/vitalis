@@ -8,8 +8,10 @@ import {
   formatVolume,
   formatWeight,
   lastNDays,
+  MEAL_LABEL,
   relativeDayLabel,
   type DaySummary,
+  type MealType,
 } from '@calorya/core';
 import Link from 'next/link';
 import { useMemo } from 'react';
@@ -27,6 +29,7 @@ import {
   useAddWater,
   useDaySummaries,
   useDaySummary,
+  useFoodEntries,
   useLatestWeight,
   useProfile,
   useTargets,
@@ -34,6 +37,13 @@ import {
 import { useDay } from '@/lib/use-day';
 
 const QUICK_WATER = [200, 350, 500] as const;
+const MEAL_ORDER: readonly MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
+const MEAL_EMOJI: Record<MealType, string> = {
+  breakfast: '\u{1F963}',
+  lunch: '\u{1F371}',
+  dinner: '\u{1F372}',
+  snack: '\u{1F34E}',
+};
 
 export default function DashboardPage() {
   const { data: profile } = useProfile();
@@ -42,6 +52,7 @@ export default function DashboardPage() {
   const { data: targets, isLoading: targetsLoading } = useTargets(day.selected);
   const { data: summary, isLoading: summaryLoading, error } = useDaySummary(day.selected);
   const { data: latestWeight } = useLatestWeight();
+  const { data: entries } = useFoodEntries(day.selected);
 
   const window = useMemo(() => lastNDays(30, day.today), [day.today]);
   const { data: recent } = useDaySummaries(window[0] ?? day.today, day.today);
@@ -51,6 +62,21 @@ export default function DashboardPage() {
     () => currentStreak((recent ?? []).map((s) => s.loggedOn), day.today),
     [recent, day.today],
   );
+
+  /**
+   * Calories per meal, so the day reads as a story rather than one number.
+   * Meals with nothing logged are dropped: an empty row says "ate nothing",
+   * which is a different claim from "did not record".
+   */
+  const byMeal = useMemo(() => {
+    const totals = new Map<MealType, number>();
+    for (const entry of entries ?? []) {
+      totals.set(entry.meal, (totals.get(entry.meal) ?? 0) + entry.kcal);
+    }
+    return MEAL_ORDER.map((meal) => ({ meal, kcal: totals.get(meal) ?? 0 })).filter(
+      (row) => row.kcal > 0,
+    );
+  }, [entries]);
 
   const today: DaySummary = summary ?? {
     loggedOn: day.selected,
@@ -166,7 +192,40 @@ export default function DashboardPage() {
             max={targets.fiberG}
             color="var(--color-food)"
           />
+
+          <Link
+            href="/nutrition"
+            className="mt-1 block rounded-xl bg-brand-500 py-3 text-center text-sm font-semibold text-ink-950"
+          >
+            + Catat Makanan
+          </Link>
         </div>
+      </Card>
+
+      <Card>
+        <SectionTitle>Ringkasan Hari Ini</SectionTitle>
+        {byMeal.length === 0 ? (
+          <p className="text-sm text-ink-500">
+            Belum ada yang dicatat. Mulai dari sarapan?
+          </p>
+        ) : (
+          <ul className="divide-y divide-ink-800">
+            {byMeal.map((row) => (
+              <li key={row.meal} className="flex items-center gap-3 py-2.5">
+                <span
+                  aria-hidden="true"
+                  className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-500/10 text-base"
+                >
+                  {MEAL_EMOJI[row.meal]}
+                </span>
+                <span className="flex-1 text-sm font-medium">{MEAL_LABEL[row.meal]}</span>
+                <span className="tabular text-sm text-ink-500">
+                  {Math.round(row.kcal)} kal
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </Card>
 
       <section>
@@ -246,13 +305,6 @@ export default function DashboardPage() {
           label="Progres minum air"
         />
       </Card>
-
-      <Link
-        href="/nutrition"
-        className="block rounded-2xl bg-brand-500 py-3.5 text-center font-medium text-ink-950"
-      >
-        + Catat makanan
-      </Link>
     </div>
   );
 }

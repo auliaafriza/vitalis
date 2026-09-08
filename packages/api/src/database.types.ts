@@ -14,6 +14,9 @@ export type SexType = 'male' | 'female';
 export type ActivityLevelType = 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active';
 export type GoalType = 'lose' | 'maintain' | 'gain';
 export type MealTypeDb = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+export type FoodCategoryDb =
+  | 'main' | 'snack' | 'drink' | 'fruit' | 'vegetable' | 'packaged' | 'other';
+export type PlanTierDb = 'free' | 'premium';
 
 type ProfileRow = {
   id: string;
@@ -110,6 +113,7 @@ type FoodRow = {
   fiber_g: number;
   sugar_g: number;
   sodium_mg: number;
+  category: FoodCategoryDb;
   serving_label: string | null;
   serving_g: number | null;
   is_liquid: boolean;
@@ -135,6 +139,23 @@ type FoodEntryRow = {
   sugar_g: number;
   sodium_mg: number;
   created_at: string;
+}
+
+type SubscriptionRow = {
+  user_id: string;
+  tier: PlanTierDb;
+  status: string;
+  current_period_end: string | null;
+  provider: string | null;
+  provider_ref: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+type AppSettingsRow = {
+  id: boolean;
+  paywall_enabled: boolean;
+  updated_at: string;
 }
 
 type DailySummaryRow = {
@@ -216,9 +237,25 @@ export interface Database {
         Insert: Insert<
           FoodRow,
           'id' | 'created_at' | 'protein_g' | 'carbs_g' | 'fat_g' | 'fiber_g'
-          | 'sugar_g' | 'sodium_mg' | 'is_liquid' | 'is_public'
+          | 'sugar_g' | 'sodium_mg' | 'is_liquid' | 'is_public' | 'category'
         >;
         Update: Partial<FoodRow>;
+        Relationships: [];
+      };
+      app_settings: {
+        Row: AppSettingsRow;
+        // The paywall switch. Flipped with the service role only — a client
+        // that could write here would unlock the product for everyone.
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      subscriptions: {
+        Row: SubscriptionRow;
+        // Written by the billing webhook with the service role — the client
+        // has no policy that permits either, hence `never`.
+        Insert: never;
+        Update: never;
         Relationships: [];
       };
       food_entries: {
@@ -248,8 +285,20 @@ export interface Database {
       };
     };
     Functions: {
+      current_tier: {
+        Args: Record<string, never>;
+        Returns: PlanTierDb;
+      };
+      history_floor: {
+        Args: Record<string, never>;
+        Returns: string;
+      };
+      paywall_enabled: {
+        Args: Record<string, never>;
+        Returns: boolean;
+      };
       search_foods: {
-        Args: { query: string; max_results?: number };
+        Args: { query: string; max_results?: number; in_category?: FoodCategoryDb };
         Returns: FoodRow[];
       };
     };
@@ -258,6 +307,8 @@ export interface Database {
       activity_level: ActivityLevelType;
       goal_type: GoalType;
       meal_type: MealTypeDb;
+      food_category: FoodCategoryDb;
+      plan_tier: PlanTierDb;
     };
     CompositeTypes: Record<never, never>;
   };

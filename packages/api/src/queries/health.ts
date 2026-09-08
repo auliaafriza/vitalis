@@ -287,6 +287,26 @@ export async function getDaySummaries(
   return rows.map(toDaySummary);
 }
 
+/**
+ * Every day on record, for export and for the "Semua" range.
+ *
+ * No date bounds: whatever the RLS window allows is what comes back, so a free
+ * user calling this still receives only their last week. The client does not
+ * need to know the rule — it cannot get around it either way.
+ */
+export async function getAllDaySummaries(client: CaloryaClient): Promise<DaySummary[]> {
+  const userId = await requireUserId(client);
+  const rows = unwrap(
+    await client
+      .from('daily_summary')
+      .select('*')
+      .eq('user_id', userId)
+      .order('logged_on', { ascending: true }),
+    'getAllDaySummaries',
+  );
+  return rows.map(toDaySummary);
+}
+
 export async function getDaySummary(
   client: CaloryaClient,
   dateKey: string,

@@ -8,7 +8,9 @@ import {
   todayKey,
 } from '@calorya/core';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { MoonIcon, PhoneIcon, SunIcon } from '../../src/components/icons';
 import { Button, Card, ErrorNote, ProgressBar } from '../../src/components/ui';
 import {
   useAddWater,
@@ -19,11 +21,13 @@ import {
   useSaveWeight,
   useTargets,
 } from '../../src/lib/hooks';
-import { radius, spacing, theme } from '../../src/lib/theme';
+import { radius, spacing, useTheme, useThemedStyles, type Theme } from '../../src/lib/theme';
 
 const QUICK_WATER = [150, 250, 350, 500] as const;
 
 export default function HealthScreen() {
+  const { theme } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const { data: profile } = useProfile();
   const timezone =
     profile?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'Asia/Jakarta';
@@ -49,7 +53,8 @@ export default function HealthScreen() {
   const waterTotal = summary?.waterMl ?? 0;
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+    <SafeAreaView edges={['top']} style={styles.screen}>
+      <ScrollView contentContainerStyle={styles.content}>
       <Card>
         <Text style={styles.title}>💧 Air minum</Text>
         <Text style={styles.value}>
@@ -181,26 +186,94 @@ export default function HealthScreen() {
         />
         {saveWeight.error != null && <ErrorNote error={saveWeight.error} />}
       </Card>
-    </ScrollView>
+      <Card>
+        <Text style={styles.title}>Tampilan</Text>
+        <ThemePicker />
+      </Card>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: theme.bg },
-  content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxl },
-  title: { color: theme.textMuted, fontSize: 13, fontWeight: '600', marginBottom: spacing.sm },
-  value: { color: theme.text, fontSize: 20, fontWeight: '700', marginBottom: spacing.sm },
-  meta: { color: theme.textDim, fontSize: 13, marginBottom: spacing.sm },
-  row: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
-  input: {
-    backgroundColor: theme.bg,
-    borderColor: theme.border,
-    borderWidth: 1,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 12,
-    color: theme.text,
-    fontSize: 15,
-    marginBottom: spacing.sm,
-  },
-});
+/**
+ * Light, dark, or whatever the device says.
+ *
+ * "Ikuti perangkat" is a real third option rather than a resolved value: a
+ * phone that switches at sunset should keep switching, and collapsing that
+ * into whichever theme is active right now would quietly stop it.
+ */
+function ThemePicker() {
+  const { choice, setChoice, theme } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+
+  const options = [
+    { value: 'light' as const, label: 'Terang', Icon: SunIcon },
+    { value: 'dark' as const, label: 'Gelap', Icon: MoonIcon },
+    { value: 'system' as const, label: 'Perangkat', Icon: PhoneIcon },
+  ];
+
+  return (
+    <View style={styles.themeRow} accessibilityRole="radiogroup">
+      {options.map((option) => {
+        const active = choice === option.value;
+        return (
+          <Pressable
+            key={option.value}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: active }}
+            accessibilityLabel={option.label}
+            onPress={() => setChoice(option.value)}
+            style={[styles.themeOption, active && styles.themeOptionActive]}
+          >
+            <option.Icon
+              color={active ? theme.brand : theme.textDim}
+              size={18}
+              weight={1.9}
+            />
+            <Text style={[styles.themeLabel, active && styles.themeLabelActive]}>
+              {option.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+const makeStyles = (theme: Theme) =>
+  StyleSheet.create({
+    screen: { flex: 1, backgroundColor: theme.bg },
+    content: {
+      padding: spacing.lg,
+      gap: spacing.lg,
+      paddingBottom: spacing.xxl * 2,
+    },
+    themeRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
+    themeOption: {
+      flex: 1,
+      alignItems: 'center',
+      gap: 6,
+      paddingVertical: spacing.md,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    themeOptionActive: { borderColor: theme.brand, backgroundColor: theme.brandSoft },
+    themeLabel: { color: theme.textDim, fontSize: 11, fontWeight: '600' },
+    themeLabelActive: { color: theme.brand },
+    title: { color: theme.textMuted, fontSize: 13, fontWeight: '600', marginBottom: spacing.sm },
+    value: { color: theme.text, fontSize: 20, fontWeight: '700', marginBottom: spacing.sm },
+    meta: { color: theme.textDim, fontSize: 13, marginBottom: spacing.sm },
+    row: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
+    input: {
+      backgroundColor: theme.bg,
+      borderColor: theme.border,
+      borderWidth: 1,
+      borderRadius: radius.md,
+      paddingHorizontal: spacing.md,
+      paddingVertical: 12,
+      color: theme.text,
+      fontSize: 15,
+      marginBottom: spacing.sm,
+    },
+  });

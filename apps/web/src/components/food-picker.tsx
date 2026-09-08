@@ -23,14 +23,21 @@ import { Button, Field, inputClass, Skeleton } from './ui';
 export function FoodPicker({
   day,
   meal,
+  initialFood,
   onClose,
 }: {
   day: string;
   meal: MealType;
+  /**
+   * A food already chosen on the page behind the dialog — from the category
+   * grid, the recents list, or a scan. Opening straight on the portion step
+   * means the browse UI is not duplicated inside the dialog it launched.
+   */
+  initialFood?: Food | null;
   onClose: () => void;
 }) {
   const [query, setQuery] = useState('');
-  const [selected, setSelected] = useState<Food | null>(null);
+  const [selected, setSelected] = useState<Food | null>(initialFood ?? null);
   const [scanning, setScanning] = useState(false);
   const [scanNote, setScanNote] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -309,7 +316,7 @@ function PortionStep({
       </div>
 
       {preview && (
-        <div className="grid grid-cols-4 gap-2 rounded-2xl border border-ink-800 bg-ink-900/60 p-3 text-center">
+        <div className="grid grid-cols-4 gap-2 rounded-2xl border border-ink-800 bg-ink-900 p-3 text-center">
           <Macro label="Kalori" value={formatKcal(preview.kcal)} />
           <Macro label="Protein" value={`${preview.proteinG.toFixed(1)} g`} />
           <Macro label="Karbo" value={`${preview.carbsG.toFixed(1)} g`} />

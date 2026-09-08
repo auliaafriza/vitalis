@@ -3,12 +3,13 @@ import {
   addFoodEntry,
   addWater,
   deleteFoodEntry,
+  getAllDaySummaries,
   getDaySummaries,
   getDaySummary,
   getFoodEntries,
   getProfile,
   getTargetsFor,
-  listFoods,
+  getTier,
   recentFoods,
   resolveBarcode,
   searchFoods,
@@ -17,6 +18,7 @@ import {
   upsertWeight,
 } from '@calorya/api';
 import type {
+  FoodCategory,
   FoodEntryInput,
   SleepEntryInput,
   StepEntryInput,
@@ -32,16 +34,50 @@ import { getClient } from './supabase';
  */
 export const qk = {
   profile: ['profile'] as const,
+  tier: ['tier'] as const,
+  allSummaries: ['summaries', 'all'] as const,
   targets: (day: string) => ['targets', day] as const,
   summary: (day: string) => ['summary', day] as const,
   summaries: (from: string, to: string) => ['summaries', from, to] as const,
   foodEntries: (day: string) => ['food-entries', day] as const,
-  foodSearch: (q: string) => ['food-search', q] as const,
+  foodSearch: (q: string, category: FoodCategory | null) =>
+    ['food-search', q, category] as const,
   recentFoods: ['recent-foods'] as const,
 };
 
 export function useProfile() {
   return useQuery({ queryKey: qk.profile, queryFn: () => getProfile(getClient()) });
+}
+
+/**
+ * The plan the database will actually honour — current_tier() is the same
+ * function the RLS policies call, so the screens can never promise more
+ * history than the server will return, and turning the paywall off
+ * (app_settings.paywall_enabled) unlocks them with no change here.
+ *
+ * Defaults to free while it loads and on any error, so a flaky connection
+ * never unlocks anything. `initialDataUpdatedAt: 0` marks that seed stale
+ * immediately — otherwise react-query would treat it as fresh and skip the
+ * fetch for the whole staleTime, leaving a premium user behind padlocks for a
+ * minute after every mount.
+ */
+export function useTier() {
+  return useQuery({
+    queryKey: qk.tier,
+    queryFn: () => getTier(getClient()),
+    staleTime: 60_000,
+    initialData: 'free' as const,
+    initialDataUpdatedAt: 0,
+  });
+}
+
+/** Whatever history the window allows — used for the "Semua" range. */
+export function useAllDaySummaries(enabled = true) {
+  return useQuery({
+    queryKey: qk.allSummaries,
+    queryFn: () => getAllDaySummaries(getClient()),
+    enabled,
+  });
 }
 
 export function useTargets(day: string) {
@@ -72,14 +108,17 @@ export function useFoodEntries(day: string) {
   });
 }
 
-export function useFoodSearch(query: string) {
+/**
+ * Empty query shows the catalogue; otherwise ranked full-text search.
+ * A category narrows either one — browsing a tile and typing are the same
+ * query with different arguments, so they can never disagree about what
+ * exists.
+ */
+export function useFoodSearch(query: string, category?: FoodCategory | null) {
   const trimmed = query.trim();
   return useQuery({
-    queryKey: qk.foodSearch(trimmed),
-    queryFn: () =>
-      trimmed.length === 0
-        ? listFoods(getClient(), 30)
-        : searchFoods(getClient(), trimmed, 30),
+    queryKey: qk.foodSearch(trimmed, category ?? null),
+    queryFn: () => searchFoods(getClient(), trimmed, 30, category ?? undefined),
     staleTime: 5 * 60_000,
   });
 }

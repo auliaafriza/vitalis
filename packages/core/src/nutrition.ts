@@ -2,6 +2,7 @@ import type {
   ActivityLevel,
   Food,
   Goal,
+  MealType,
   Nutrients,
   Sex,
   Targets,
@@ -244,4 +245,21 @@ export function macroSplit(n: Pick<Nutrients, 'proteinG' | 'carbsG' | 'fatG'>): 
  */
 export function defaultPortionG(food: Pick<Food, 'servingG'>): number {
   return food.servingG && food.servingG > 0 ? food.servingG : 100;
+}
+
+/**
+ * Which meal a log at this hour most likely belongs to.
+ *
+ * Used to preselect the meal so the common case — open the app at lunchtime,
+ * add lunch — takes no taps at all. The boundaries are late rather than
+ * generous: someone eating at 14:00 in Indonesia is finishing lunch, not
+ * starting dinner, and a wrong guess costs a correction the user may not
+ * notice, so the guess should be the boring one.
+ */
+export function mealForHour(hour: number): MealType {
+  if (hour < 4) return 'snack'; // after midnight is nobody's breakfast
+  if (hour < 10) return 'breakfast';
+  if (hour < 15) return 'lunch';
+  if (hour < 21) return 'dinner';
+  return 'snack';
 }

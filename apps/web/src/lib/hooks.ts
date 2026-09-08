@@ -7,17 +7,19 @@ import {
   addWater,
   deleteFoodEntry,
   deleteWater,
+  getAllDaySummaries,
   getDaySummaries,
   getDaySummary,
+  getFoodEntriesRange,
   getFoodEntries,
   getLatestWeight,
   getProfile,
   getSleep,
   getSteps,
   getTargetsFor,
+  getTier,
   getWaterEntries,
   getWeightEntries,
-  listFoods,
   recentFoods,
   resolveBarcode,
   searchFoods,
@@ -26,6 +28,7 @@ import {
   upsertWeight,
 } from '@calorya/api';
 import type {
+  FoodCategory,
   FoodEntryInput,
   MoodEntryInput,
   SleepEntryInput,
@@ -41,6 +44,9 @@ import { getBrowserClient } from './supabase/client';
  */
 export const qk = {
   profile: ['profile'] as const,
+  tier: ['tier'] as const,
+  allSummaries: ['summaries', 'all'] as const,
+  entriesRange: (from: string, to: string) => ['entries-range', from, to] as const,
   targets: (day: string) => ['targets', day] as const,
   summary: (day: string) => ['summary', day] as const,
   summaries: (from: string, to: string) => ['summaries', from, to] as const,
@@ -50,9 +56,51 @@ export const qk = {
   steps: (day: string) => ['steps', day] as const,
   weights: (from: string, to: string) => ['weights', from, to] as const,
   latestWeight: ['latest-weight'] as const,
-  foodSearch: (q: string) => ['food-search', q] as const,
+  foodSearch: (q: string, category: FoodCategory | null) =>
+    ['food-search', q, category] as const,
   recentFoods: ['recent-foods'] as const,
 };
+
+/**
+ * The plan the database will actually honour.
+ *
+ * Asked of current_tier() — the same function the RLS policies call — so the
+ * UI can never claim more than the user can read, and so that turning the
+ * paywall off (app_settings.paywall_enabled) unlocks the interface without a
+ * single change here.
+ *
+ * `initialDataUpdatedAt: 0` is load-bearing: without it react-query treats the
+ * seeded 'free' as fresh and skips the fetch for the whole staleTime, so a
+ * premium user would sit behind padlocks for a minute after every mount.
+ * Dating the seed to the epoch marks it stale immediately, so it is only ever
+ * the value shown for the first render.
+ */
+export function useTier() {
+  return useQuery({
+    queryKey: qk.tier,
+    queryFn: () => getTier(getBrowserClient()),
+    staleTime: 60_000,
+    initialData: 'free' as const,
+    initialDataUpdatedAt: 0,
+  });
+}
+
+/** Whatever history the window allows — used for the "Semua" range and export. */
+export function useAllDaySummaries(enabled = true) {
+  return useQuery({
+    queryKey: qk.allSummaries,
+    queryFn: () => getAllDaySummaries(getBrowserClient()),
+    enabled,
+  });
+}
+
+export function useFoodEntriesRange(from: string, to: string, enabled = true) {
+  return useQuery({
+    queryKey: qk.entriesRange(from, to),
+    queryFn: () => getFoodEntriesRange(getBrowserClient(), from, to),
+    enabled,
+  });
+}
 
 export function useProfile() {
   return useQuery({
@@ -124,15 +172,17 @@ export function useLatestWeight() {
   });
 }
 
-/** Empty query shows the catalogue; otherwise ranked full-text search. */
-export function useFoodSearch(query: string) {
+/**
+ * Empty query shows the catalogue; otherwise ranked full-text search.
+ * A category narrows either one — browsing a tile and typing are the same
+ * query with different arguments, so they can never disagree about what
+ * exists.
+ */
+export function useFoodSearch(query: string, category?: FoodCategory | null) {
   const trimmed = query.trim();
   return useQuery({
-    queryKey: qk.foodSearch(trimmed),
-    queryFn: () =>
-      trimmed.length === 0
-        ? listFoods(getBrowserClient(), 30)
-        : searchFoods(getBrowserClient(), trimmed, 30),
+    queryKey: qk.foodSearch(trimmed, category ?? null),
+    queryFn: () => searchFoods(getBrowserClient(), trimmed, 30, category ?? undefined),
     staleTime: 5 * 60_000,
   });
 }

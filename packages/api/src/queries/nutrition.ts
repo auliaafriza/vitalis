@@ -20,6 +20,27 @@ export async function getFoodEntries(
   return rows.map(toFoodEntry);
 }
 
+/** Every logged item in a date range — the detail sheet of an export. */
+export async function getFoodEntriesRange(
+  client: CaloryaClient,
+  fromDate: string,
+  toDate: string,
+): Promise<FoodEntry[]> {
+  const userId = await requireUserId(client);
+  const rows = unwrap(
+    await client
+      .from('food_entries')
+      .select('*')
+      .eq('user_id', userId)
+      .gte('logged_on', fromDate)
+      .lte('logged_on', toDate)
+      .order('logged_on', { ascending: true })
+      .order('logged_at', { ascending: true }),
+    'getFoodEntriesRange',
+  );
+  return rows.map(toFoodEntry);
+}
+
 export interface MealGroup {
   meal: MealType;
   entries: FoodEntry[];

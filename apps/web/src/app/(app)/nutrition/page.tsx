@@ -6,10 +6,13 @@ import {
   macroSplit,
   MEAL_EMOJI,
   MEAL_LABEL,
+  mealForHour,
   sumNutrients,
+  type Food,
   type MealType,
 } from '@calorya/core';
 import { useMemo, useState } from 'react';
+import { FoodBrowser } from '@/components/food-browser';
 import { FoodPicker } from '@/components/food-picker';
 import { DayNav } from '@/components/nav';
 import {
@@ -27,6 +30,19 @@ export default function NutritionPage() {
   const { data: profile } = useProfile();
   const day = useDay(profile?.timezone);
   const [picking, setPicking] = useState<MealType | null>(null);
+  const [chosen, setChosen] = useState<Food | null>(null);
+
+  /**
+   * Which meal a food picked from the browser goes to.
+   *
+   * Guessed from the clock rather than asked: at 12:40 almost nobody is
+   * logging breakfast, and the dialog still shows the meal so a wrong guess
+   * costs one tap — while asking every time costs one tap always.
+   */
+  function pickFood(food: Food) {
+    setChosen(food);
+    setPicking(mealForHour(new Date().getHours()));
+  }
 
   const { data: entries, isLoading, error } = useFoodEntries(day.selected);
   const { data: targets } = useTargets(day.selected);
@@ -41,7 +57,12 @@ export default function NutritionPage() {
   return (
     <div className="space-y-5">
       <header className="space-y-3">
-        <h1 className="text-xl font-semibold">Nutrisi</h1>
+        <div>
+          <h1 className="text-xl font-semibold">Catat Makanan</h1>
+          <p className="mt-1 text-sm text-ink-500">
+            Cari atau pindai makanan, langsung lihat informasi kalorinya.
+          </p>
+        </div>
         <DayNav
           selected={day.selected}
           today={day.today}
@@ -51,6 +72,8 @@ export default function NutritionPage() {
           onToday={day.goToToday}
         />
       </header>
+
+      <FoodBrowser onPick={pickFood} />
 
       <Card>
         <div className="flex items-baseline justify-between">
@@ -132,7 +155,7 @@ export default function NutritionPage() {
                 {group.entries.map((entry) => (
                   <li
                     key={entry.id}
-                    className="flex items-center justify-between gap-3 bg-ink-900/40 px-3 py-3"
+                    className="flex items-center justify-between gap-3 bg-ink-900 px-3 py-3"
                   >
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-ink-100">
@@ -166,7 +189,15 @@ export default function NutritionPage() {
       )}
 
       {picking && (
-        <FoodPicker day={day.selected} meal={picking} onClose={() => setPicking(null)} />
+        <FoodPicker
+          day={day.selected}
+          meal={picking}
+          initialFood={chosen}
+          onClose={() => {
+            setPicking(null);
+            setChosen(null);
+          }}
+        />
       )}
     </div>
   );

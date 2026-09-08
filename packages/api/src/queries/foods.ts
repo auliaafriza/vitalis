@@ -1,28 +1,40 @@
-import { toEan13, type Food, type FoodInput } from '@calorya/core';
+import { toEan13, type Food, type FoodCategory, type FoodInput } from '@calorya/core';
 import { lookupBarcode, type OpenFoodFactsOptions } from '../openfoodfacts';
 import { requireUserId, unwrap, unwrapMaybe, type CaloryaClient } from '../client';
 import { toFood } from '../mappers';
 
-/** Ranked search over the public catalogue plus the user's own foods. */
+/**
+ * Ranked search over the public catalogue plus the user's own foods,
+ * optionally narrowed to one category.
+ *
+ * Browsing a category tile and typing in the search box are the same call with
+ * different arguments — one query to reason about, one ranking, and no way for
+ * the two paths to disagree about what exists.
+ */
 export async function searchFoods(
   client: CaloryaClient,
   query: string,
   limit = 25,
+  category?: FoodCategory,
 ): Promise<Food[]> {
   const rows = unwrap(
-    await client.rpc('search_foods', { query, max_results: limit }),
+    await client.rpc('search_foods', {
+      query,
+      max_results: limit,
+      in_category: category ?? undefined,
+    }),
     'searchFoods',
   );
   return rows.map(toFood);
 }
 
 /** The catalogue shown before the user types anything. */
-export async function listFoods(client: CaloryaClient, limit = 30): Promise<Food[]> {
-  const rows = unwrap(
-    await client.from('foods').select('*').order('name').limit(limit),
-    'listFoods',
-  );
-  return rows.map(toFood);
+export async function listFoods(
+  client: CaloryaClient,
+  limit = 30,
+  category?: FoodCategory,
+): Promise<Food[]> {
+  return searchFoods(client, '', limit, category);
 }
 
 export async function getFood(client: CaloryaClient, id: string): Promise<Food | null> {
@@ -145,6 +157,8 @@ export async function createFood(client: CaloryaClient, input: FoodInput): Promi
         serving_label: input.servingLabel ?? null,
         serving_g: input.servingG ?? null,
         is_liquid: input.isLiquid,
+        // Anything arriving by barcode came off a package, by definition.
+        category: input.category ?? (input.barcode ? 'packaged' : 'other'),
         is_public: false,
         created_by: userId,
       })

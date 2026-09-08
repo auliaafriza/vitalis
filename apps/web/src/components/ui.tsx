@@ -15,7 +15,7 @@ export function Card({
 }) {
   return (
     <Tag
-      className={`rounded-2xl border border-ink-800 bg-ink-900/60 p-4 backdrop-blur ${className}`}
+      className={`rounded-2xl border border-ink-800 card-shadow bg-ink-900 p-4 ${className}`}
     >
       {children}
     </Tag>
@@ -203,7 +203,7 @@ export function StatTile({
   accent?: string;
 }) {
   return (
-    <div className="rounded-2xl border border-ink-800 bg-ink-900/60 p-3">
+    <div className="rounded-2xl border border-ink-800 bg-ink-900 p-3">
       <div className="flex items-center gap-1.5">
         <span
           aria-hidden="true"
@@ -243,7 +243,7 @@ export function Skeleton({ className = '' }: { className?: string }) {
   return (
     <div
       aria-hidden="true"
-      className={`animate-pulse rounded-xl bg-ink-800/70 ${className}`}
+      className={`animate-pulse rounded-xl bg-ink-800 ${className}`}
     />
   );
 }
@@ -260,10 +260,6 @@ export function ErrorNote({ error }: { error: unknown }) {
     </div>
   );
 }
-
-/* -------------------------------------------------------------------------
-   Password field with a show/hide toggle.
-   ---------------------------------------------------------------------- */
 
 function EyeIcon() {
   return (
@@ -287,18 +283,6 @@ function EyeOffIcon() {
   );
 }
 
-/**
- * A password input that can be revealed.
- *
- * Notes that matter:
- *  - `type="button"` so the toggle never submits the form it lives in.
- *  - `aria-pressed` announces the current state; the label says what the
- *    button will DO, not what it currently shows.
- *  - visibility always starts hidden, on every mount. Revealing a password is
- *    a deliberate act and should not be remembered.
- *  - onMouseDown is prevented so clicking the toggle does not steal focus
- *    from the field the user is typing in.
- */
 export function PasswordInput({
   value,
   onChange,
@@ -315,7 +299,6 @@ export function PasswordInput({
   name?: string;
 }) {
   const [visible, setVisible] = useState(false);
-
   return (
     <div className="relative">
       <input
@@ -342,6 +325,51 @@ export function PasswordInput({
       >
         {visible ? <EyeOffIcon /> : <EyeIcon />}
       </button>
+    </div>
+  );
+}
+
+/**
+ * The pill row on Progress: Kalori · Berat Badan · Nutrisi.
+ *
+ * A radiogroup rather than tabs: it selects which measure to look at, it does
+ * not switch between panels of unrelated content, and screen readers announce
+ * "3 of 3 selected" rather than a tab list the user cannot arrow through.
+ */
+export function Segmented<T extends string>({
+  options,
+  value,
+  onChange,
+  label,
+}: {
+  options: readonly { value: T; label: string }[];
+  value: T;
+  onChange: (next: T) => void;
+  label: string;
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label={label}
+      className="flex gap-1 rounded-full bg-ink-800 p-1"
+    >
+      {options.map((option) => {
+        const active = option.value === value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(option.value)}
+            className={`flex-1 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+              active ? 'bg-ink-900 text-ink-100 shadow-sm' : 'text-ink-500 hover:text-ink-300'
+            }`}
+          >
+            {option.label}
+          </button>
+        );
+      })}
     </div>
   );
 }

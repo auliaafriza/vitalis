@@ -14,6 +14,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Button, Card, ErrorNote, Field, inputClass, SectionTitle } from '@/components/ui';
+import { ThemePicker } from '@/components/theme-picker';
 import { qk, useProfile, useTargets } from '@/lib/hooks';
 import { getBrowserClient } from '@/lib/supabase/client';
 import { useDay } from '@/lib/use-day';
@@ -104,6 +105,11 @@ export default function SettingsPage() {
         <SectionTitle>Akun</SectionTitle>
         <p className="text-sm text-ink-300">{profile?.fullName ?? 'Tanpa nama'}</p>
         <p className="text-xs text-ink-500">Zona waktu: {profile?.timezone}</p>
+      </Card>
+
+      <Card>
+        <SectionTitle>Tampilan</SectionTitle>
+        <ThemePicker />
       </Card>
 
       <Card>

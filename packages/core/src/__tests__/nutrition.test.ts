@@ -7,6 +7,7 @@ import {
   kcalFromMacros,
   macroSplit,
   macroTargets,
+  mealForHour,
   nutrientsForQuantity,
   sumNutrients,
   tdee,
@@ -171,5 +172,33 @@ describe('portion maths', () => {
   it('prefers a stated serving size as the default portion', () => {
     expect(defaultPortionG({ servingG: 118 })).toBe(118);
     expect(defaultPortionG({ servingG: null })).toBe(100);
+  });
+});
+
+describe('mealForHour', () => {
+  it('maps the day to the meal people are actually eating', () => {
+    expect(mealForHour(7)).toBe('breakfast');
+    expect(mealForHour(12)).toBe('lunch');
+    expect(mealForHour(19)).toBe('dinner');
+    expect(mealForHour(22)).toBe('snack');
+  });
+
+  it('treats the small hours as a snack, not breakfast', () => {
+    // 02:00 is someone finishing yesterday, not starting today.
+    expect(mealForHour(0)).toBe('snack');
+    expect(mealForHour(3)).toBe('snack');
+    expect(mealForHour(4)).toBe('breakfast');
+  });
+
+  it('keeps early afternoon on lunch', () => {
+    // The boundary that matters most in practice: 14:00 is late lunch.
+    expect(mealForHour(14)).toBe('lunch');
+    expect(mealForHour(15)).toBe('dinner');
+  });
+
+  it('covers every hour of the day', () => {
+    for (let hour = 0; hour < 24; hour += 1) {
+      expect(['breakfast', 'lunch', 'dinner', 'snack']).toContain(mealForHour(hour));
+    }
   });
 });

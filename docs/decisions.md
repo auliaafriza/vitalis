@@ -150,3 +150,87 @@ mengarahkan resolusi ke `types/index.d.ts` yang konsisten.
 **Konsekuensi.**
 - `tsc --noEmit` bersih di aplikasi mobile.
 - Perlu ditinjau ulang ketika RN menstabilkan tipe generated-nya.
+
+---
+
+## ADR-009 — Paywall dimatikan lewat satu saklar di database, bukan dihapus
+
+**Konteks.** Fitur premium (tren 30/90/365/semua, ekspor CSV & PDF) sudah dibangun
+lengkap dengan penegakan di RLS. Untuk sementara semuanya ingin dibuka gratis —
+demo portofolio tanpa gembok lebih enak dilihat, dan belum ada penagihan yang
+berjalan. Pilihannya: hapus kodenya, atau matikan penegakannya.
+
+**Keputusan.** Tabel satu baris `app_settings.paywall_enabled` (default `false`)
+dibaca oleh `paywall_enabled()`, dan `current_tier()` mengembalikan `'premium'`
+selama saklar itu mati.
+
+**Konsekuensi.**
+- Menyalakan kembali cukup satu perintah, tanpa deploy dan tanpa ubah kode:
+  `update public.app_settings set paywall_enabled = true;`
+- Tidak ada sumber kebenaran kedua. Semua konsumen — `history_floor()`, setiap
+  policy RLS, dan `LIMITS` di sisi klien — sudah membaca `current_tier()`, jadi
+  saklar ini satu-satunya tempat keputusannya dibuat.
+- Baris `subscriptions` tetap jujur menulis `'free'`. Baris itu mencatat apa yang
+  dibayar seseorang; `current_tier()` mencatat apa yang boleh dia lakukan. Sengaja
+  bukan hal yang sama, supaya penagihan nanti tidak perlu membersihkan data palsu.
+- `paywall_enabled()` sengaja *fail-open*: baris setelan yang hilang membuka produk,
+  bukan mengunci semua orang dari riwayatnya sendiri. Ini satu-satunya tempat di
+  kode entitlement yang arah amannya permisif, karena mode gagalnya adalah
+  kehilangan akses ke data sendiri, bukan kehilangan pendapatan.
+- Suite `supabase/tests/entitlements.sql` menyalakan saklar itu di dalam
+  transaksinya sendiri, jadi gerbangnya tetap teruji meski produk dikirim terbuka.
+
+---
+
+## ADR-010 — Skala `ink` bermakna jarak dari permukaan baca, bukan terang-gelap
+
+**Konteks.** Aplikasi perlu tema terang (sesuai desain baru) dan gelap sekaligus.
+Cara biasa — awalan `dark:` di setiap kelas warna — berarti sekitar 170 suntingan
+yang harus terus dijaga sinkron selamanya, dan satu kelas yang terlewat menghasilkan
+teks tak terbaca di salah satu tema.
+
+**Keputusan.** Angka pada skala `ink` diartikan ulang: **950 adalah halaman yang
+dilihat sekilas, 100 adalah teks yang dibaca**, dan angka di antaranya adalah lapisan
+di antara keduanya. Nilainya dibalik per tema lewat CSS custom property, dirakit
+dengan `@theme inline` supaya utilitas Tailwind memancarkan `var(--ink-500)` bukan
+nilai literal.
+
+**Konsekuensi.**
+- `text-ink-100` tetap berarti "teks utama" di kedua tema. Tidak ada satu pun
+  varian `dark:` di markup.
+- `text-ink-950` di atas `bg-brand-500` otomatis benar di keduanya: krem di atas
+  hijau tua (terang), hampir hitam di atas mint (gelap).
+- Yang harus diperhatikan: permukaan tembus pandang. `bg-ink-900/60` mengandaikan
+  latar gelap di belakangnya; semuanya diganti jadi solid karena putih 60% di atas
+  krem tidak lagi terlihat sebagai kartu.
+- React Native tidak punya custom property, jadi `apps/mobile/src/lib/theme.tsx`
+  menyimpan dua objek palet dan `useThemedStyles(makeStyles)` membangun ulang
+  `StyleSheet` saat tema berganti. Cache-nya berkunci identitas objek tema, dan
+  kedua palet adalah konstanta modul, jadi bolak-balik tema memakai ulang dua sheet
+  yang sama.
+- `userInterfaceStyle` di app.json jadi `automatic` — sebelumnya dipaksa `dark`.
+
+---
+
+## ADR-011 — Kategori makanan disimpan sebagai kolom, bukan ditebak dari nama
+
+**Konteks.** Grid "Kategori Populer" butuh kategori. Menebaknya dari nama makanan
+saat dibaca lebih murah dan tidak butuh migrasi.
+
+**Keputusan.** Kolom `foods.category` bertipe enum, diisi eksplisit untuk katalog
+bawaan lewat daftar nama, bukan pola LIKE.
+
+**Konsekuensi.**
+- Tebakan berbasis pola akan menjawab beda di tiap layar, dan sama sekali tidak bisa
+  mengklasifikasikan produk yang diimpor lewat barcode — justru tempat tebakan paling
+  tidak bisa dipercaya. Impor barcode sekarang default ke `packaged`.
+- 'Susu kedelai' itu minuman dan 'Tahu putih' itu makanan utama; tidak ada satu pola
+  yang benar untuk keduanya. Karena itu daftarnya ditulis eksplisit supaya bisa
+  ditinjau.
+- `search_foods()` mendapat parameter `in_category` — bukan `category`, karena nama
+  parameter yang sama dengan nama kolom membuat `f.category = category` ambigu dan
+  Postgres diam-diam memenangkan parameter, sehingga filternya cocok ke semua baris.
+- Fungsi lama di-DROP, bukan di-REPLACE: menambah parameter berdefault menciptakan
+  overload, dan PostgREST akan menolak memilih di antara dua kandidat.
+- Default kolom `other`, bukan `main`: makanan tak terklasifikasi harus terlihat tak
+  terklasifikasi, bukan diam-diam menggelembungkan kategori yang paling sering dibuka.
