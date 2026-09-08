@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { credentialsSchema } from '@calorya/core';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useState } from 'react';
@@ -133,6 +134,12 @@ function LoginForm() {
         >
           {mode === 'signin' ? 'Daftar' : 'Masuk'}
         </button>
+      </p>
+
+      <p className="mt-8 text-center text-xs text-ink-500">
+        <Link href="/privasi" className="underline underline-offset-4">
+          Kebijakan Privasi
+        </Link>
       </p>
     </main>
   );

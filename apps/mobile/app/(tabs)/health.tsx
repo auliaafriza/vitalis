@@ -8,7 +8,15 @@ import {
   todayKey,
 } from '@calorya/core';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  Linking,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MoonIcon, PhoneIcon, SunIcon } from '../../src/components/icons';
 import { Button, Card, ErrorNote, ProgressBar } from '../../src/components/ui';
@@ -24,6 +32,16 @@ import {
 import { radius, spacing, useTheme, useThemedStyles, type Theme } from '../../src/lib/theme';
 
 const QUICK_WATER = [150, 250, 350, 500] as const;
+
+/**
+ * CHANGE THIS to the real deployed domain before submitting to Google Play.
+ *
+ * It points at the web copy of the policy so the app, the store listing and
+ * the site all quote one document — a second copy inside the app would drift
+ * from it the first time either is edited. The value below is a guess at the
+ * Vercel domain and is almost certainly wrong.
+ */
+const PRIVACY_URL = 'https://calorya.vercel.app/privasi';
 
 export default function HealthScreen() {
   const { theme } = useTheme();
@@ -190,6 +208,21 @@ export default function HealthScreen() {
         <Text style={styles.title}>Tampilan</Text>
         <ThemePicker />
       </Card>
+
+      <Card>
+        <Text style={styles.title}>Privasi</Text>
+        <Text style={styles.meta}>
+          Catatanmu hanya bisa dibaca oleh akunmu. Tidak ada iklan dan tidak ada
+          pelacak di aplikasi ini.
+        </Text>
+        <Pressable
+          accessibilityRole="link"
+          onPress={() => Linking.openURL(PRIVACY_URL)}
+          style={{ marginTop: spacing.md }}
+        >
+          <Text style={styles.privacyLink}>Baca kebijakan privasi</Text>
+        </Pressable>
+      </Card>
       </ScrollView>
     </SafeAreaView>
   );
@@ -248,6 +281,7 @@ const makeStyles = (theme: Theme) =>
       gap: spacing.lg,
       paddingBottom: spacing.xxl * 2,
     },
+    privacyLink: { color: theme.brand, fontSize: 14, fontWeight: '600' },
     themeRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
     themeOption: {
       flex: 1,

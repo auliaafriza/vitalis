@@ -30,8 +30,7 @@
       },
       "permissions": [
         "android.permission.ACTIVITY_RECOGNITION",
-        "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.CAMERA"
       ],
       "edgeToEdgeEnabled": true,
       "versionCode": 1
@@ -42,7 +41,8 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Calorya memakai kamera hanya untuk membaca barcode kemasan makanan. Tidak ada foto yang disimpan atau dikirim."
+          "cameraPermission": "Calorya memakai kamera hanya untuk membaca barcode kemasan makanan. Tidak ada foto yang disimpan atau dikirim.",
+          "recordAudioAndroid": false
         }
       ]
     ],

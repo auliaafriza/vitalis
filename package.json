@@ -21,6 +21,51 @@
   "devDependencies": {
     "typescript": "^5.9.3"
   },
+  "//overrides": [
+    "Exactly one Metro, pinned to the version Expo SDK 57 ships.",
+    "",
+    "Two packages ask for Metro and they do not agree:",
+    "  expo -> @expo/metro@56.0.2 -> metro@0.84.5 (exact)",
+    "  react-native@0.86.3 -> @react-native/community-cli-plugin -> metro@^0.84.3",
+    "",
+    "That caret is the problem. Whether npm satisfies it with the 0.84.5 already",
+    "in the tree or fetches a newer 0.84.x depends on when the install ran and",
+    "which npm ran it, so two machines installing the SAME lockfile can end up",
+    "with different trees. When the newer one wins it gets hoisted to the root,",
+    "Expo's packages nest their own 0.84.5, and the build dies with",
+    "'Cannot read properties of undefined (reading transformFile)' — the CLI",
+    "loads Bundler from one copy and the transformer from the other.",
+    "",
+    "Pinning every metro-* package removes the choice. Bump these together with",
+    "the Expo SDK, matching whatever @expo/metro depends on."
+  ],
+  "//overrides-worklets": [
+    "react-native-worklets is a PEER dependency of react-native-reanimated@4,",
+    "not a normal one, so whether it gets installed at all is up to npm's peer",
+    "auto-install — it landed in one machine's tree and not another's. When it",
+    "is absent, babel-preset-expo still asks for 'react-native-worklets/plugin',",
+    "the transformer fails to construct, and Metro then reports the useless",
+    "'Cannot read properties of undefined (reading transformFile)' instead of",
+    "the real cause. apps/mobile depends on it explicitly now; this override",
+    "collapses the peer-installed copy onto the same version so the native",
+    "build has only one to autolink."
+  ],
+  "overrides": {
+    "react-native-worklets": "0.10.1",
+    "metro": "0.84.5",
+    "metro-babel-transformer": "0.84.5",
+    "metro-cache": "0.84.5",
+    "metro-cache-key": "0.84.5",
+    "metro-config": "0.84.5",
+    "metro-core": "0.84.5",
+    "metro-file-map": "0.84.5",
+    "metro-minify-terser": "0.84.5",
+    "metro-resolver": "0.84.5",
+    "metro-runtime": "0.84.5",
+    "metro-source-map": "0.84.5",
+    "metro-transform-plugins": "0.84.5",
+    "metro-transform-worker": "0.84.5"
+  },
   "engines": {
     "node": ">=20.19.0"
   }

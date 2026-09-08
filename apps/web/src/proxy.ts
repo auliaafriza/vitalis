@@ -2,7 +2,17 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import type { Database } from '@calorya/api';
 
-const PUBLIC_PATHS = ['/login', '/auth', '/offline', '/manifest.webmanifest', '/sw.js'];
+// `/privasi` must stay reachable without signing in: Google Play requires a
+// policy URL it can open anonymously, and a redirect to /login there reads as
+// a broken link.
+const PUBLIC_PATHS = [
+  '/login',
+  '/auth',
+  '/offline',
+  '/privasi',
+  '/manifest.webmanifest',
+  '/sw.js',
+];
 
 /**
  * Refreshes the Supabase session on every request and guards the app routes.

@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { saveTargets, updateProfile } from '@calorya/api';
 import {
   ACTIVITY_LABEL,
@@ -110,6 +111,20 @@ export default function SettingsPage() {
       <Card>
         <SectionTitle>Tampilan</SectionTitle>
         <ThemePicker />
+      </Card>
+
+      <Card>
+        <SectionTitle>Privasi</SectionTitle>
+        <p className="text-sm text-ink-500">
+          Catatanmu hanya bisa dibaca oleh akunmu, dan tidak ada iklan atau
+          pelacak di aplikasi ini.
+        </p>
+        <Link
+          href="/privasi"
+          className="mt-3 inline-block text-sm font-medium text-brand-400 underline underline-offset-4"
+        >
+          Baca kebijakan privasi
+        </Link>
       </Card>
 
       <Card>
