@@ -1,6 +1,7 @@
 export * from './database.types';
 export * from './client';
 export * from './mappers';
+export * from './queries/auth';
 export * from './queries/profile';
 export * from './queries/subscription';
 export * from './openfoodfacts';

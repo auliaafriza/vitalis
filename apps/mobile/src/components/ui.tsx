@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
+  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -58,7 +59,7 @@ export function Button({
 }: {
   label: string;
   onPress: () => void;
-  variant?: 'primary' | 'ghost';
+  variant?: 'primary' | 'ghost' | 'danger';
   disabled?: boolean;
   loading?: boolean;
   icon?: ReactNode;
@@ -67,6 +68,7 @@ export function Button({
   const { theme } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const isPrimary = variant === 'primary';
+  const isDanger = variant === 'danger';
 
   return (
     <Pressable
@@ -76,23 +78,109 @@ export function Button({
       disabled={disabled || loading}
       style={({ pressed }) => [
         styles.button,
-        isPrimary ? styles.buttonPrimary : styles.buttonGhost,
+        isDanger
+          ? styles.buttonDanger
+          : isPrimary
+            ? styles.buttonPrimary
+            : styles.buttonGhost,
         (disabled || loading) && styles.buttonDisabled,
         pressed && styles.buttonPressed,
         style,
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={isPrimary ? theme.onBrand : theme.text} />
+        <ActivityIndicator color={isPrimary || isDanger ? theme.onBrand : theme.text} />
       ) : (
         <>
           {icon}
-          <Text style={isPrimary ? styles.buttonTextPrimary : styles.buttonTextGhost}>
+          <Text
+            style={
+              isPrimary || isDanger ? styles.buttonTextPrimary : styles.buttonTextGhost
+            }
+          >
             {label}
           </Text>
         </>
       )}
     </Pressable>
+  );
+}
+
+/**
+ * A yes/no question the user must answer before something irreversible happens.
+ *
+ * A real Modal rather than `Alert.alert`, for three reasons that all bit us:
+ *   - Alert's button list is not implemented on React Native Web, so on the
+ *     web build the dialog appeared with no way to confirm — the action simply
+ *     never ran and the button looked dead;
+ *   - Alert cannot show a pending state, so a slow sign-out looked frozen;
+ *   - Alert cannot show the error when the action fails, which is how a
+ *     failure turns into "the button does nothing".
+ *
+ * `busy` keeps the sheet open and the buttons disabled while the work runs, so
+ * the answer is never collected twice, and `error` is rendered in place.
+ */
+export function ConfirmModal({
+  visible,
+  title,
+  message,
+  confirmLabel,
+  cancelLabel = 'Batal',
+  destructive = false,
+  busy = false,
+  error,
+  onConfirm,
+  onCancel,
+}: {
+  visible: boolean;
+  title: string;
+  message: string;
+  confirmLabel: string;
+  cancelLabel?: string;
+  destructive?: boolean;
+  busy?: boolean;
+  error?: unknown;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const styles = useThemedStyles(makeStyles);
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      // Android's back button must answer "no", never "yes" — but not while
+      // the action is already running, or the sheet would vanish mid-flight.
+      onRequestClose={() => {
+        if (!busy) onCancel();
+      }}
+    >
+      <View style={styles.confirmBackdrop}>
+        <View style={styles.confirmSheet}>
+          <Text style={styles.confirmTitle}>{title}</Text>
+          <Text style={styles.confirmBody}>{message}</Text>
+
+          {error != null && <ErrorNote error={error} />}
+
+          <View style={styles.confirmActions}>
+            <Button
+              label={cancelLabel}
+              variant="ghost"
+              disabled={busy}
+              onPress={onCancel}
+              style={{ flex: 1 }}
+            />
+            <Button
+              label={confirmLabel}
+              variant={destructive ? 'danger' : 'primary'}
+              loading={busy}
+              onPress={onConfirm}
+              style={{ flex: 1 }}
+            />
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -263,17 +351,30 @@ export function StatTile({
   unit,
   hint,
   accent,
+  onPress,
 }: {
   label: string;
   value: string;
   unit?: string;
   hint?: string;
   accent?: string;
+  /** When given the whole tile becomes a button — used to open the editor. */
+  onPress?: () => void;
 }) {
   const { theme } = useTheme();
   const styles = useThemedStyles(makeStyles);
+  const Container = onPress ? Pressable : View;
   return (
-    <View style={styles.tile}>
+    <Container
+      {...(onPress
+        ? {
+            onPress,
+            accessibilityRole: 'button' as const,
+            accessibilityLabel: `${label}: ${value}. Ketuk untuk mengubah.`,
+          }
+        : {})}
+      style={styles.tile}
+    >
       <View style={styles.tileHeader}>
         <View style={[styles.dot, { backgroundColor: accent ?? theme.brand }]} />
         <Text style={styles.tileLabel}>{label}</Text>
@@ -283,7 +384,7 @@ export function StatTile({
         {unit ? <Text style={styles.tileUnit}> {unit}</Text> : null}
       </Text>
       {hint ? <Text style={styles.tileHint}>{hint}</Text> : null}
-    </View>
+    </Container>
   );
 }
 
@@ -348,12 +449,22 @@ export function PasswordInput({
   );
 }
 
-export function EmptyState({ title, description }: { title: string; description: string }) {
+export function EmptyState({
+  title,
+  description,
+  action,
+}: {
+  title: string;
+  description: string;
+  /** An offer that belongs with the emptiness, e.g. "salin dari kemarin". */
+  action?: ReactNode;
+}) {
   const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.empty}>
       <Text style={styles.emptyTitle}>{title}</Text>
       <Text style={styles.emptyBody}>{description}</Text>
+      {action ? <View style={styles.emptyAction}>{action}</View> : null}
     </View>
   );
 }
@@ -410,6 +521,27 @@ const makeStyles = (theme: Theme) =>
     },
     buttonPrimary: { backgroundColor: theme.brand },
     buttonGhost: { borderWidth: 1, borderColor: theme.border },
+    buttonDanger: { backgroundColor: theme.danger },
+    confirmBackdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.45)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: spacing.lg,
+    },
+    confirmSheet: {
+      width: '100%',
+      maxWidth: 400,
+      backgroundColor: theme.surface,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: theme.border,
+      padding: spacing.lg,
+      gap: spacing.md,
+    },
+    confirmTitle: { color: theme.text, fontSize: 17, fontWeight: '700' },
+    confirmBody: { color: theme.textMuted, fontSize: 14, lineHeight: 21 },
+    confirmActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
     buttonDisabled: { opacity: 0.5 },
     buttonPressed: { opacity: 0.85 },
     buttonTextPrimary: { color: theme.onBrand, fontWeight: '700', fontSize: 15 },
@@ -463,6 +595,7 @@ const makeStyles = (theme: Theme) =>
       alignItems: 'center',
     },
     emptyTitle: { color: theme.textMuted, fontWeight: '600' },
+    emptyAction: { marginTop: spacing.md, alignSelf: 'stretch' },
     emptyBody: {
       color: theme.textDim,
       fontSize: 13,

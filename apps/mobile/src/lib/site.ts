@@ -32,3 +32,13 @@ export const authCallbackUrl = (): string | null =>
   SITE_URL ? `${SITE_URL}/auth/callback` : null;
 
 export const privacyUrl = (): string | null => (SITE_URL ? `${SITE_URL}/privasi` : null);
+
+/**
+ * Where a password-reset link lands.
+ *
+ * The web page, not a deep link into the app: changing a password needs the
+ * recovery session Supabase establishes in the browser, and the web flow for
+ * that already exists and is tested.
+ */
+export const passwordResetUrl = (): string | null =>
+  SITE_URL ? `${SITE_URL}/sandi-baru` : null;

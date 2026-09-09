@@ -1,5 +1,6 @@
 import { groupByMeal } from '@calorya/api';
 import {
+  addDays,
   CATEGORY_EMOJI,
   CATEGORY_LABEL,
   CATEGORY_TINT,
@@ -39,8 +40,10 @@ import {
 } from '../../src/components/ui';
 import {
   useAddFood,
+  useCopyMeal,
   useDeleteFood,
   useFoodEntries,
+  useUpdateFoodQuantity,
   useFoodSearch,
   useProfile,
   useRecentFoods,
@@ -75,10 +78,25 @@ export default function NutritionScreen() {
   const { data: targets } = useTargets(day);
   const { data: recent } = useRecentFoods();
   const deleteFood = useDeleteFood(day);
+  const updateQuantity = useUpdateFoodQuantity(day);
+
+  /**
+   * Repeating yesterday, offered only where a meal is still empty: copying
+   * into a meal that already has entries is how people end up eating lunch
+   * twice on paper.
+   */
+  const copyMeal = useCopyMeal(day);
+  const yesterday = addDays(day, -1);
+  /** The meal whose copy found nothing — said out loud instead of no-op. */
+  const [nothingToCopy, setNothingToCopy] = useState<MealType | null>(null);
 
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<FoodCategory | null>(null);
   const [chosen, setChosen] = useState<Food | null>(null);
+  /** The logged entry being corrected, if any. */
+  const [editing, setEditing] = useState<{ id: string; name: string; quantityG: number } | null>(
+    null,
+  );
   const searchRef = useRef<TextInput>(null);
 
   // The + button in the tab bar lands here with ?add=1 and should feel like it
@@ -320,24 +338,69 @@ export default function NutritionScreen() {
             {group.entries.length === 0 ? (
               <EmptyState
                 title="Belum ada catatan"
-                description={`Tambahkan apa yang kamu makan saat ${MEAL_LABEL[
-                  group.meal
-                ].toLowerCase()}.`}
+                description={
+                  nothingToCopy === group.meal
+                    ? `Kemarin juga tidak ada catatan ${MEAL_LABEL[
+                        group.meal
+                      ].toLowerCase()}.`
+                    : `Tambahkan apa yang kamu makan saat ${MEAL_LABEL[
+                        group.meal
+                      ].toLowerCase()}.`
+                }
+                action={
+                  <Button
+                    label="⟲ Salin dari kemarin"
+                    variant="ghost"
+                    loading={copyMeal.isPending}
+                    onPress={() => {
+                      setNothingToCopy(null);
+                      copyMeal.mutate(
+                        { from: yesterday, meal: group.meal },
+                        {
+                          onSuccess: (copied) => {
+                            if (copied.length === 0) setNothingToCopy(group.meal);
+                          },
+                        },
+                      );
+                    }}
+                  />
+                }
               />
             ) : (
               <View style={styles.list}>
+                {/*
+                  Two separate targets side by side, never one inside the
+                  other. A Pressable nested in a Pressable is two buttons
+                  claiming the same pixels: the tap on × runs the delete AND
+                  bubbles to the row, which then opens the portion sheet for
+                  an entry that no longer exists.
+                */}
                 {group.entries.map((entry) => (
-                  <View key={entry.id} style={styles.row}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.rowName} numberOfLines={1}>
-                        {entry.foodName}
-                      </Text>
-                      <Text style={styles.rowMeta}>
-                        {Math.round(entry.quantityG)} g · P {entry.proteinG.toFixed(0)} · K{' '}
-                        {entry.carbsG.toFixed(0)} · L {entry.fatG.toFixed(0)}
-                      </Text>
-                    </View>
-                    <Text style={styles.rowKcal}>{Math.round(entry.kcal)}</Text>
+                  <View key={entry.id} style={styles.entryRow}>
+                    <Pressable
+                      style={styles.rowMain}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Ubah porsi ${entry.foodName}`}
+                      onPress={() =>
+                        setEditing({
+                          id: entry.id,
+                          name: entry.foodName,
+                          quantityG: entry.quantityG,
+                        })
+                      }
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.rowName} numberOfLines={1}>
+                          {entry.foodName}
+                        </Text>
+                        <Text style={styles.rowMeta}>
+                          {Math.round(entry.quantityG)} g · P{' '}
+                          {entry.proteinG.toFixed(0)} · K {entry.carbsG.toFixed(0)} · L{' '}
+                          {entry.fatG.toFixed(0)}
+                        </Text>
+                      </View>
+                      <Text style={styles.rowKcal}>{Math.round(entry.kcal)}</Text>
+                    </Pressable>
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel={`Hapus ${entry.foodName}`}
@@ -355,6 +418,28 @@ export default function NutritionScreen() {
       </ScrollView>
 
       <Modal
+        visible={editing !== null}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setEditing(null)}
+      >
+        {editing ? (
+          <EditQuantitySheet
+            entry={editing}
+            busy={updateQuantity.isPending}
+            error={updateQuantity.error}
+            onSave={(quantityG) =>
+              updateQuantity.mutate(
+                { id: editing.id, quantityG },
+                { onSuccess: () => setEditing(null) },
+              )
+            }
+            onClose={() => setEditing(null)}
+          />
+        ) : null}
+      </Modal>
+
+      <Modal
         visible={chosen !== null}
         animationType="slide"
         presentationStyle="pageSheet"
@@ -369,6 +454,63 @@ export default function NutritionScreen() {
           />
         ) : null}
       </Modal>
+    </SafeAreaView>
+  );
+}
+
+/**
+ * Correcting a portion after the fact.
+ *
+ * This existed in the API from the start and had no button anywhere, so a
+ * mistyped 1500 g had to be deleted and logged again. The nutrition snapshot
+ * is recomputed by the database trigger on update, so the numbers stay right.
+ */
+function EditQuantitySheet({
+  entry,
+  busy,
+  error,
+  onSave,
+  onClose,
+}: {
+  entry: { id: string; name: string; quantityG: number };
+  busy: boolean;
+  error: unknown;
+  onSave: (quantityG: number) => void;
+  onClose: () => void;
+}) {
+  const styles = useThemedStyles(makeStyles);
+  const [amount, setAmount] = useState(String(Math.round(entry.quantityG)));
+
+  const quantity = Number(amount);
+  const valid = Number.isFinite(quantity) && quantity > 0 && quantity <= 5000;
+
+  return (
+    <SafeAreaView style={styles.screen}>
+      <View style={styles.sheetHeader}>
+        <Text style={styles.sheetTitle}>Ubah porsi</Text>
+        <Pressable onPress={onClose} accessibilityRole="button">
+          <Text style={styles.link}>Tutup</Text>
+        </Pressable>
+      </View>
+
+      <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg }}>
+        <Text style={styles.rowName}>{entry.name}</Text>
+        <TextInput
+          value={amount}
+          onChangeText={setAmount}
+          keyboardType="numeric"
+          style={styles.input}
+          accessibilityLabel="Porsi dalam gram"
+          autoFocus
+        />
+        {error != null && <ErrorNote error={error} />}
+        <Button
+          label="Simpan porsi"
+          onPress={() => valid && onSave(quantity)}
+          disabled={!valid}
+          loading={busy}
+        />
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -608,6 +750,29 @@ const makeStyles = (theme: Theme) =>
       backgroundColor: theme.surface,
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: theme.border,
+    },
+    /**
+     * A logged entry: same frame as `row`, but with no vertical padding of its
+     * own. The padding moves inside `rowMain` so that the full height of the
+     * row is tappable for editing rather than only the text — dead pixels
+     * along the top and bottom edge of a list row feel like a broken button.
+     */
+    entryRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      paddingHorizontal: spacing.md,
+      backgroundColor: theme.surface,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: theme.border,
+    },
+    /** Everything in a logged row except the × — the edit target. */
+    rowMain: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      paddingVertical: spacing.md,
     },
     rowIcon: {
       width: 40,

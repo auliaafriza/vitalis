@@ -41,6 +41,7 @@ export function toProfile(row: Tables['profiles']['Row']): Profile {
     goal: row.goal,
     timezone: row.timezone,
     onboardedAt: row.onboarded_at,
+    tutorialSeenAt: row.tutorial_seen_at,
   };
 }
 

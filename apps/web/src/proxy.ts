@@ -10,6 +10,12 @@ const PUBLIC_PATHS = [
   '/auth',
   '/offline',
   '/privasi',
+  // The reset pages must be reachable while signed out — that is the whole
+  // point of them. /sandi-baru additionally runs with a recovery session,
+  // which the guard below would otherwise treat as a normal login and bounce
+  // to the dashboard before the password is changed.
+  '/lupa-sandi',
+  '/sandi-baru',
   '/manifest.webmanifest',
   '/sw.js',
 ];

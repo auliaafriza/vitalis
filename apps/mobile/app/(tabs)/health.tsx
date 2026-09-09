@@ -8,22 +8,14 @@ import {
   todayKey,
 } from '@calorya/core';
 import { useState } from 'react';
-import {
-  Linking,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MoonIcon, PhoneIcon, SunIcon } from '../../src/components/icons';
-import { privacyUrl } from '../../src/lib/site';
 import { Button, Card, ErrorNote, ProgressBar } from '../../src/components/ui';
 import {
   useAddWater,
   useDaySummary,
+  useDeleteWater,
+  useWaterEntries,
   useProfile,
   useSaveSleep,
   useSaveSteps,
@@ -46,6 +38,8 @@ export default function HealthScreen() {
   const { data: summary } = useDaySummary(day);
 
   const addWater = useAddWater(day);
+  const deleteWater = useDeleteWater(day);
+  const { data: waterEntries } = useWaterEntries(day);
   const saveWeight = useSaveWeight(day);
   const saveSleep = useSaveSleep(day);
   const saveSteps = useSaveSteps(day);
@@ -91,6 +85,35 @@ export default function HealthScreen() {
           ))}
         </View>
         {addWater.error != null && <ErrorNote error={addWater.error} />}
+
+        {/*
+          The individual glasses, so a mistaken tap can be taken back. Without
+          this the only way to undo a double-tapped 500 ml was to live with it.
+        */}
+        {waterEntries && waterEntries.length > 0 ? (
+          <View style={styles.waterList}>
+            {waterEntries.map((entry) => (
+              <View key={entry.id} style={styles.waterRow}>
+                <Text style={styles.waterAmount}>{formatVolume(entry.amountMl)}</Text>
+                <Text style={styles.waterTime}>
+                  {new Date(entry.loggedAt).toLocaleTimeString('id-ID', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Hapus catatan ${formatVolume(entry.amountMl)}`}
+                  onPress={() => deleteWater.mutate(entry.id)}
+                  disabled={deleteWater.isPending}
+                  hitSlop={8}
+                >
+                  <Text style={styles.remove}>×</Text>
+                </Pressable>
+              </View>
+            ))}
+          </View>
+        ) : null}
       </Card>
 
       <Card>
@@ -195,74 +218,8 @@ export default function HealthScreen() {
         />
         {saveWeight.error != null && <ErrorNote error={saveWeight.error} />}
       </Card>
-      <Card>
-        <Text style={styles.title}>Tampilan</Text>
-        <ThemePicker />
-      </Card>
-
-      <Card>
-        <Text style={styles.title}>Privasi</Text>
-        <Text style={styles.meta}>
-          Catatanmu hanya bisa dibaca oleh akunmu. Tidak ada iklan dan tidak ada
-          pelacak di aplikasi ini.
-        </Text>
-        {privacyUrl() ? (
-          <Pressable
-            accessibilityRole="link"
-            onPress={() => Linking.openURL(privacyUrl()!)}
-            style={{ marginTop: spacing.md }}
-          >
-            <Text style={styles.privacyLink}>Baca kebijakan privasi</Text>
-          </Pressable>
-        ) : null}
-      </Card>
       </ScrollView>
     </SafeAreaView>
-  );
-}
-
-/**
- * Light, dark, or whatever the device says.
- *
- * "Ikuti perangkat" is a real third option rather than a resolved value: a
- * phone that switches at sunset should keep switching, and collapsing that
- * into whichever theme is active right now would quietly stop it.
- */
-function ThemePicker() {
-  const { choice, setChoice, theme } = useTheme();
-  const styles = useThemedStyles(makeStyles);
-
-  const options = [
-    { value: 'light' as const, label: 'Terang', Icon: SunIcon },
-    { value: 'dark' as const, label: 'Gelap', Icon: MoonIcon },
-    { value: 'system' as const, label: 'Perangkat', Icon: PhoneIcon },
-  ];
-
-  return (
-    <View style={styles.themeRow} accessibilityRole="radiogroup">
-      {options.map((option) => {
-        const active = choice === option.value;
-        return (
-          <Pressable
-            key={option.value}
-            accessibilityRole="radio"
-            accessibilityState={{ selected: active }}
-            accessibilityLabel={option.label}
-            onPress={() => setChoice(option.value)}
-            style={[styles.themeOption, active && styles.themeOptionActive]}
-          >
-            <option.Icon
-              color={active ? theme.brand : theme.textDim}
-              size={18}
-              weight={1.9}
-            />
-            <Text style={[styles.themeLabel, active && styles.themeLabelActive]}>
-              {option.label}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
   );
 }
 
@@ -274,24 +231,22 @@ const makeStyles = (theme: Theme) =>
       gap: spacing.lg,
       paddingBottom: spacing.xxl * 2,
     },
-    privacyLink: { color: theme.brand, fontSize: 14, fontWeight: '600' },
-    themeRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
-    themeOption: {
-      flex: 1,
-      alignItems: 'center',
-      gap: 6,
-      paddingVertical: spacing.md,
-      borderRadius: radius.md,
-      borderWidth: 1,
-      borderColor: theme.border,
-    },
-    themeOptionActive: { borderColor: theme.brand, backgroundColor: theme.brandSoft },
-    themeLabel: { color: theme.textDim, fontSize: 11, fontWeight: '600' },
-    themeLabelActive: { color: theme.brand },
     title: { color: theme.textMuted, fontSize: 13, fontWeight: '600', marginBottom: spacing.sm },
     value: { color: theme.text, fontSize: 20, fontWeight: '700', marginBottom: spacing.sm },
     meta: { color: theme.textDim, fontSize: 13, marginBottom: spacing.sm },
     row: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
+    waterList: { marginTop: spacing.md, gap: 2 },
+    waterRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      paddingVertical: 8,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: theme.border,
+    },
+    waterAmount: { flex: 1, color: theme.text, fontSize: 13, fontWeight: '600' },
+    waterTime: { color: theme.textDim, fontSize: 12 },
+    remove: { color: theme.textDim, fontSize: 20, paddingHorizontal: 4 },
     input: {
       backgroundColor: theme.bg,
       borderColor: theme.border,

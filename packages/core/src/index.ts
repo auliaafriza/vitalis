@@ -7,3 +7,7 @@ export * from './barcode';
 export * from './entitlements';
 export * from './export';
 export * from './format';
+export * from './tutorial';
+export * from './onboarding-steps';
+export * from './auth-gate';
+export * from './auth-errors';

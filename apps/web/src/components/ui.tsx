@@ -239,6 +239,98 @@ export function EmptyState({
   );
 }
 
+/**
+ * A yes/no question the user must answer before something irreversible runs.
+ *
+ * Not `window.confirm`: it cannot show a pending state, cannot show the error
+ * when the action fails, and is blocked outright by some browsers inside an
+ * installed PWA — which is exactly where this app runs.
+ *
+ * `busy` holds the dialog open with both buttons disabled while the work is in
+ * flight, so the question is never answered twice, and `error` renders in
+ * place instead of vanishing with the dialog.
+ */
+export function ConfirmDialog({
+  open,
+  title,
+  message,
+  confirmLabel,
+  cancelLabel = 'Batal',
+  destructive = false,
+  busy = false,
+  error,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean;
+  title: string;
+  message: string;
+  confirmLabel: string;
+  cancelLabel?: string;
+  destructive?: boolean;
+  busy?: boolean;
+  error?: unknown;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  if (!open) return null;
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-5"
+      // Clicking the backdrop answers "no" — but not mid-flight, or the
+      // dialog would disappear while the sign-out is still running.
+      onClick={() => {
+        if (!busy) onCancel();
+      }}
+    >
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-label={title}
+        onClick={(event) => event.stopPropagation()}
+        className="w-full max-w-sm space-y-3 rounded-2xl border border-ink-800 bg-ink-900 p-5 shadow-xl"
+      >
+        <h2 className="text-base font-semibold">{title}</h2>
+        <p className="text-sm leading-relaxed text-ink-300">{message}</p>
+
+        {error != null && <ErrorNote error={error} />}
+
+        <div className="flex gap-2 pt-1">
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={busy}
+            onClick={onCancel}
+            className="flex-1"
+          >
+            {cancelLabel}
+          </Button>
+          {/*
+            Solid red with white text, not the text-only `danger` variant used
+            in lists: at dialog size that variant renders pale red on a pale
+            surface and the confirm button is the one thing here that must be
+            unmistakable. Explicit colours rather than theme tokens, because
+            red-600/white clears contrast in both themes.
+          */}
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={busy}
+            onClick={onConfirm}
+            className={`flex-1 ${
+              destructive
+                ? 'border-transparent bg-red-600 text-white hover:bg-red-500'
+                : 'border-transparent bg-brand-500 text-ink-950 hover:bg-brand-400'
+            }`}
+          >
+            {busy ? 'Memproses…' : confirmLabel}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Skeleton({ className = '' }: { className?: string }) {
   return (
     <div

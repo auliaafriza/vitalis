@@ -47,6 +47,8 @@ export interface Profile {
   goal: Goal;
   timezone: string;
   onboardedAt: string | null;
+  /** When the intro slides were finished or skipped. null = not shown yet. */
+  tutorialSeenAt: string | null;
 }
 
 /** Daily goals. Everything the rings on the dashboard fill up against. */

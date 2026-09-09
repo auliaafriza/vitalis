@@ -1,10 +1,17 @@
 'use client';
 
 import Link from 'next/link';
-import { saveTargets, updateProfile } from '@calorya/api';
+import {
+  saveTargets,
+  setTutorialSeen,
+  signOutEverywhere,
+  updateProfile,
+} from '@calorya/api';
 import {
   ACTIVITY_LABEL,
   ACTIVITY_LEVELS,
+  authErrorMessage,
+  credentialsSchema,
   formatVolume,
   GOAL_LABEL,
   targetsSchema,
@@ -14,7 +21,16 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Button, Card, ErrorNote, Field, inputClass, SectionTitle } from '@/components/ui';
+import {
+  Button,
+  Card,
+  ConfirmDialog,
+  ErrorNote,
+  Field,
+  inputClass,
+  PasswordInput,
+  SectionTitle,
+} from '@/components/ui';
 import { ThemePicker } from '@/components/theme-picker';
 import { qk, useProfile, useTargets } from '@/lib/hooks';
 import { getBrowserClient } from '@/lib/supabase/client';
@@ -92,10 +108,113 @@ export default function SettingsPage() {
     }
   }
 
+  /**
+   * Replay the intro.
+   *
+   * Clears the column and navigates; the app shell would send them there on
+   * the next render anyway, so this is the same gate rather than a second one.
+   */
+  /**
+   * Name and password, editable after setup.
+   *
+   * Both were write-once before this: the name could only be set during
+   * onboarding and the password only at sign-up or through the emailed reset
+   * link. Neither is a reasonable place to leave a user — a typo in your own
+   * name is not worth a support request, and changing a password should not
+   * require pretending to have forgotten it.
+   */
+  const [nameDraft, setNameDraft] = useState('');
+  const [nameSaved, setNameSaved] = useState(false);
+  const [nameBusy, setNameBusy] = useState(false);
+
+  useEffect(() => {
+    if (profile?.fullName != null) setNameDraft(profile.fullName);
+  }, [profile?.fullName]);
+
+  async function saveName() {
+    const trimmed = nameDraft.trim();
+    if (trimmed.length === 0 || trimmed === (profile?.fullName ?? '')) return;
+    setError(null);
+    setNameBusy(true);
+    try {
+      await updateProfile(getBrowserClient(), { fullName: trimmed });
+      await queryClient.invalidateQueries({ queryKey: qk.profile });
+      setNameSaved(true);
+      setTimeout(() => setNameSaved(false), 2000);
+    } catch (err) {
+      setError(err);
+    } finally {
+      setNameBusy(false);
+    }
+  }
+
+  const [password, setPassword] = useState('');
+  const [passwordConfirm, setPasswordConfirm] = useState('');
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [passwordDone, setPasswordDone] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+
+  async function savePassword() {
+    setPasswordError(null);
+    const parsed = credentialsSchema.shape.password.safeParse(password);
+    if (!parsed.success) {
+      setPasswordError(parsed.error.issues[0]?.message ?? 'Kata sandi tidak valid');
+      return;
+    }
+    if (password !== passwordConfirm) {
+      setPasswordError('Konfirmasi kata sandi belum sama.');
+      return;
+    }
+    setPasswordBusy(true);
+    try {
+      const { error: updateError } = await getBrowserClient().auth.updateUser({
+        password,
+      });
+      if (updateError) throw updateError;
+      setPassword('');
+      setPasswordConfirm('');
+      setPasswordDone(true);
+      setTimeout(() => setPasswordDone(false), 3000);
+    } catch (err) {
+      setPasswordError(authErrorMessage(err));
+    } finally {
+      setPasswordBusy(false);
+    }
+  }
+
+  async function replayTutorial() {
+    await setTutorialSeen(getBrowserClient(), false);
+    await queryClient.invalidateQueries({ queryKey: qk.profile });
+    router.push('/tutorial');
+  }
+
+  /**
+   * Signing out, confirmed first.
+   *
+   * The old version awaited `auth.signOut()` with no catch and no dialog. A
+   * global sign-out is a network call that revokes the refresh token, so it
+   * throws when offline and returns 403 when the token is already dead — and
+   * in both cases the `router.replace` below it never ran. The button did
+   * nothing at all, with nothing on screen to explain why.
+   */
+  const [askSignOut, setAskSignOut] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState<unknown>(null);
+
   async function handleSignOut() {
-    await getBrowserClient().auth.signOut();
-    router.replace('/login');
-    router.refresh();
+    setSignOutError(null);
+    setSigningOut(true);
+    try {
+      await signOutEverywhere(getBrowserClient());
+      // Cached data belongs to the account that just left; the next person to
+      // sign in on this browser must not see it for even one frame.
+      queryClient.clear();
+      router.replace('/login');
+      router.refresh();
+    } catch (err) {
+      setSignOutError(err);
+      setSigningOut(false);
+    }
   }
 
   return (
@@ -103,14 +222,92 @@ export default function SettingsPage() {
       <h1 className="text-xl font-semibold">Profil & target</h1>
 
       <Card>
-        <SectionTitle>Akun</SectionTitle>
-        <p className="text-sm text-ink-300">{profile?.fullName ?? 'Tanpa nama'}</p>
-        <p className="text-xs text-ink-500">Zona waktu: {profile?.timezone}</p>
+        <SectionTitle
+          action={
+            nameSaved ? (
+              <span className="text-xs text-brand-400">Tersimpan</span>
+            ) : undefined
+          }
+        >
+          Nama
+        </SectionTitle>
+        <form
+          className="flex gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void saveName();
+          }}
+        >
+          <input
+            value={nameDraft}
+            onChange={(event) => setNameDraft(event.target.value)}
+            className={inputClass}
+            placeholder="Nama panggilan"
+            autoComplete="name"
+            maxLength={80}
+            aria-label="Nama"
+          />
+          <Button
+            type="submit"
+            variant="ghost"
+            disabled={nameBusy || nameDraft.trim() === (profile?.fullName ?? '')}
+          >
+            Simpan
+          </Button>
+        </form>
+        <p className="mt-2 text-xs text-ink-500">Zona waktu: {profile?.timezone}</p>
+      </Card>
+
+      <Card>
+        <SectionTitle>Kata sandi</SectionTitle>
+        {passwordDone ? (
+          <p className="text-sm text-brand-400">Kata sandi berhasil diganti.</p>
+        ) : null}
+        <form
+          className="space-y-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void savePassword();
+          }}
+        >
+          <Field label="Kata sandi baru" hint="Minimal 8 karakter">
+            <PasswordInput
+              value={password}
+              onChange={setPassword}
+              autoComplete="new-password"
+            />
+          </Field>
+          <Field label="Ulangi kata sandi" error={passwordError ?? undefined}>
+            <PasswordInput
+              value={passwordConfirm}
+              onChange={setPasswordConfirm}
+              autoComplete="new-password"
+            />
+          </Field>
+          <Button
+            type="submit"
+            variant="ghost"
+            disabled={passwordBusy || password.length === 0}
+            className="w-full"
+          >
+            {passwordBusy ? 'Menyimpan…' : 'Ganti kata sandi'}
+          </Button>
+        </form>
       </Card>
 
       <Card>
         <SectionTitle>Tampilan</SectionTitle>
         <ThemePicker />
+      </Card>
+
+      <Card>
+        <SectionTitle>Panduan</SectionTitle>
+        <p className="text-sm text-ink-500">
+          Perkenalan singkat tentang cara mencatat makanan, air dan progress.
+        </p>
+        <Button variant="ghost" onClick={replayTutorial} className="mt-3">
+          Lihat tutorial lagi
+        </Button>
       </Card>
 
       <Card>
@@ -240,9 +437,29 @@ export default function SettingsPage() {
         </form>
       </Card>
 
-      <Button variant="ghost" onClick={handleSignOut} className="w-full">
+      <Button
+        type="button"
+        variant="ghost"
+        onClick={() => {
+          setSignOutError(null);
+          setAskSignOut(true);
+        }}
+        className="w-full"
+      >
         Keluar
       </Button>
+
+      <ConfirmDialog
+        open={askSignOut}
+        title="Keluar dari akun?"
+        message="Sesi di browser ini akan dihapus dan token-nya dicabut. Catatanmu tetap tersimpan dan menunggu kamu kembali."
+        confirmLabel="Keluar"
+        destructive
+        busy={signingOut}
+        error={signOutError}
+        onConfirm={() => void handleSignOut()}
+        onCancel={() => setAskSignOut(false)}
+      />
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { groupByMeal } from '@calorya/api';
 import {
+  addDays,
   formatKcal,
   macroSplit,
   MEAL_EMOJI,
@@ -23,7 +24,14 @@ import {
   SectionTitle,
   Skeleton,
 } from '@/components/ui';
-import { useDeleteFood, useFoodEntries, useProfile, useTargets } from '@/lib/hooks';
+import {
+  useCopyMeal,
+  useDeleteFood,
+  useFoodEntries,
+  useProfile,
+  useTargets,
+  useUpdateFoodQuantity,
+} from '@/lib/hooks';
 import { useDay } from '@/lib/use-day';
 
 export default function NutritionPage() {
@@ -47,6 +55,20 @@ export default function NutritionPage() {
   const { data: entries, isLoading, error } = useFoodEntries(day.selected);
   const { data: targets } = useTargets(day.selected);
   const deleteFood = useDeleteFood(day.selected);
+  const updateQuantity = useUpdateFoodQuantity(day.selected);
+
+  /**
+   * Repeating yesterday, offered only where a meal is still empty: copying
+   * into a meal that already has entries is how people end up eating lunch
+   * twice on paper.
+   */
+  const copyMeal = useCopyMeal(day.selected);
+  const yesterday = addDays(day.selected, -1);
+  /** The meal whose copy found nothing — said out loud instead of no-op. */
+  const [nothingToCopy, setNothingToCopy] = useState<MealType | null>(null);
+  /** id of the entry whose portion is being corrected inline. */
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draftQuantity, setDraftQuantity] = useState('');
 
   const groups = useMemo(() => groupByMeal(entries ?? []), [entries]);
   const totals = useMemo(() => sumNutrients(entries ?? []), [entries]);
@@ -148,7 +170,31 @@ export default function NutritionPage() {
             {group.entries.length === 0 ? (
               <EmptyState
                 title="Belum ada catatan"
-                description={`Tambahkan apa yang kamu makan saat ${MEAL_LABEL[group.meal].toLowerCase()}.`}
+                description={
+                  nothingToCopy === group.meal
+                    ? `Kemarin juga tidak ada catatan ${MEAL_LABEL[group.meal].toLowerCase()}.`
+                    : `Tambahkan apa yang kamu makan saat ${MEAL_LABEL[group.meal].toLowerCase()}.`
+                }
+                action={
+                  <button
+                    type="button"
+                    disabled={copyMeal.isPending}
+                    onClick={() => {
+                      setNothingToCopy(null);
+                      copyMeal.mutate(
+                        { from: yesterday, meal: group.meal },
+                        {
+                          onSuccess: (copied) => {
+                            if (copied.length === 0) setNothingToCopy(group.meal);
+                          },
+                        },
+                      );
+                    }}
+                    className="rounded-xl border border-ink-700 px-3 py-2 text-sm font-medium text-ink-300 hover:border-brand-500 hover:text-brand-400 disabled:opacity-50"
+                  >
+                    ⟲ Salin dari kemarin
+                  </button>
+                }
               />
             ) : (
               <ul className="divide-y divide-ink-800 overflow-hidden rounded-2xl border border-ink-800">
@@ -161,10 +207,58 @@ export default function NutritionPage() {
                       <p className="truncate text-sm font-medium text-ink-100">
                         {entry.foodName}
                       </p>
-                      <p className="tabular text-xs text-ink-500">
-                        {Math.round(entry.quantityG)} g · P {entry.proteinG.toFixed(0)} ·
-                        K {entry.carbsG.toFixed(0)} · L {entry.fatG.toFixed(0)}
-                      </p>
+                      {editing === entry.id ? (
+                        <form
+                          onSubmit={(event) => {
+                            event.preventDefault();
+                            const quantityG = Number(draftQuantity);
+                            if (!Number.isFinite(quantityG) || quantityG <= 0) return;
+                            updateQuantity.mutate(
+                              { id: entry.id, quantityG },
+                              { onSuccess: () => setEditing(null) },
+                            );
+                          }}
+                          className="mt-1 flex items-center gap-2"
+                        >
+                          <input
+                            type="number"
+                            value={draftQuantity}
+                            onChange={(event) => setDraftQuantity(event.target.value)}
+                            autoFocus
+                            min={1}
+                            max={5000}
+                            aria-label={`Porsi ${entry.foodName} dalam gram`}
+                            className="w-24 rounded-lg border border-ink-700 bg-ink-950 px-2 py-1 text-sm"
+                          />
+                          <span className="text-xs text-ink-500">g</span>
+                          <button
+                            type="submit"
+                            disabled={updateQuantity.isPending}
+                            className="text-xs font-medium text-brand-400"
+                          >
+                            Simpan
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditing(null)}
+                            className="text-xs text-ink-500"
+                          >
+                            Batal
+                          </button>
+                        </form>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditing(entry.id);
+                            setDraftQuantity(String(Math.round(entry.quantityG)));
+                          }}
+                          className="tabular text-left text-xs text-ink-500 underline decoration-dotted underline-offset-4 hover:text-ink-300"
+                        >
+                          {Math.round(entry.quantityG)} g · P {entry.proteinG.toFixed(0)} ·
+                          K {entry.carbsG.toFixed(0)} · L {entry.fatG.toFixed(0)}
+                        </button>
+                      )}
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       <span className="tabular text-sm text-ink-300">

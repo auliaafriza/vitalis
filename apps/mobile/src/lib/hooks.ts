@@ -2,17 +2,21 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   addFoodEntry,
   addWater,
+  copyMeal,
   deleteFoodEntry,
+  deleteWater,
   getAllDaySummaries,
   getDaySummaries,
   getDaySummary,
   getFoodEntries,
   getProfile,
+  getWaterEntries,
   getTargetsFor,
   getTier,
   recentFoods,
   resolveBarcode,
   searchFoods,
+  updateFoodEntryQuantity,
   upsertSleep,
   upsertSteps,
   upsertWeight,
@@ -20,6 +24,7 @@ import {
 import type {
   FoodCategory,
   FoodEntryInput,
+  MealType,
   SleepEntryInput,
   StepEntryInput,
   WaterEntryInput,
@@ -40,6 +45,7 @@ export const qk = {
   summary: (day: string) => ['summary', day] as const,
   summaries: (from: string, to: string) => ['summaries', from, to] as const,
   foodEntries: (day: string) => ['food-entries', day] as const,
+  water: (day: string) => ['water', day] as const,
   foodSearch: (q: string, category: FoodCategory | null) =>
     ['food-search', q, category] as const,
   recentFoods: ['recent-foods'] as const,
@@ -123,6 +129,14 @@ export function useFoodSearch(query: string, category?: FoodCategory | null) {
   });
 }
 
+/** The individual glasses logged today — needed to undo a mistaken one. */
+export function useWaterEntries(day: string) {
+  return useQuery({
+    queryKey: qk.water(day),
+    queryFn: () => getWaterEntries(getClient(), day),
+  });
+}
+
 export function useRecentFoods() {
   return useQuery({
     queryKey: qk.recentFoods,
@@ -137,6 +151,7 @@ function useDayInvalidator(day: string) {
     void client.invalidateQueries({ queryKey: qk.summary(day) });
     void client.invalidateQueries({ queryKey: ['summaries'] });
     void client.invalidateQueries({ queryKey: qk.foodEntries(day) });
+    void client.invalidateQueries({ queryKey: qk.water(day) });
     void client.invalidateQueries({ queryKey: qk.recentFoods });
   };
 }
@@ -164,6 +179,38 @@ export function useDeleteFood(day: string) {
   const invalidate = useDayInvalidator(day);
   return useMutation({
     mutationFn: (id: string) => deleteFoodEntry(getClient(), id),
+    onSuccess: invalidate,
+  });
+}
+
+/** Correcting a portion, rather than deleting and logging it again. */
+export function useUpdateFoodQuantity(day: string) {
+  const invalidate = useDayInvalidator(day);
+  return useMutation({
+    mutationFn: ({ id, quantityG }: { id: string; quantityG: number }) =>
+      updateFoodEntryQuantity(getClient(), id, quantityG),
+    onSuccess: invalidate,
+  });
+}
+
+/**
+ * Repeat a meal from another day. Copies by food id, so the entries reflect
+ * the food as it is defined now; resolves to an empty array when the source
+ * meal was empty, which the screen reports rather than silently doing nothing.
+ */
+export function useCopyMeal(day: string) {
+  const invalidate = useDayInvalidator(day);
+  return useMutation({
+    mutationFn: ({ from, meal }: { from: string; meal: MealType }) =>
+      copyMeal(getClient(), from, day, meal),
+    onSuccess: invalidate,
+  });
+}
+
+export function useDeleteWater(day: string) {
+  const invalidate = useDayInvalidator(day);
+  return useMutation({
+    mutationFn: (id: string) => deleteWater(getClient(), id),
     onSuccess: invalidate,
   });
 }

@@ -21,6 +21,8 @@ export default function TabsLayout() {
       <Tabs.Screen name="index" options={{ title: 'Beranda' }} />
       <Tabs.Screen name="nutrition" options={{ title: 'Catat' }} />
       <Tabs.Screen name="trends" options={{ title: 'Progress' }} />
+      <Tabs.Screen name="profil" options={{ title: 'Profil' }} />
+      {/* Reached from the Beranda tiles rather than the bar — see TabBar. */}
       <Tabs.Screen name="health" options={{ title: 'Kesehatan' }} />
     </Tabs>
   );

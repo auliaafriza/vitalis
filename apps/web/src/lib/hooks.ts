@@ -5,6 +5,7 @@ import {
   addFoodEntry,
   addMood,
   addWater,
+  copyMeal,
   deleteFoodEntry,
   deleteWater,
   getAllDaySummaries,
@@ -23,6 +24,7 @@ import {
   recentFoods,
   resolveBarcode,
   searchFoods,
+  updateFoodEntryQuantity,
   upsertSleep,
   upsertSteps,
   upsertWeight,
@@ -30,6 +32,7 @@ import {
 import type {
   FoodCategory,
   FoodEntryInput,
+  MealType,
   MoodEntryInput,
   SleepEntryInput,
   StepEntryInput,
@@ -238,6 +241,33 @@ export function useDeleteFood(day: string) {
   const invalidate = useDayInvalidator(day);
   return useMutation({
     mutationFn: (id: string) => deleteFoodEntry(getBrowserClient(), id),
+    onSuccess: invalidate,
+  });
+}
+
+/** Correcting a portion, rather than deleting and logging it again. */
+export function useUpdateFoodQuantity(day: string) {
+  const invalidate = useDayInvalidator(day);
+  return useMutation({
+    mutationFn: ({ id, quantityG }: { id: string; quantityG: number }) =>
+      updateFoodEntryQuantity(getBrowserClient(), id, quantityG),
+    onSuccess: invalidate,
+  });
+}
+
+/**
+ * Repeat a meal from another day.
+ *
+ * Copying by food id rather than by the stored snapshot means the copy uses
+ * the food as it is defined now — and the returned array is empty when there
+ * was nothing to copy, which the caller shows as a message rather than
+ * pretending something happened.
+ */
+export function useCopyMeal(day: string) {
+  const invalidate = useDayInvalidator(day);
+  return useMutation({
+    mutationFn: ({ from, meal }: { from: string; meal: MealType }) =>
+      copyMeal(getBrowserClient(), from, day, meal),
     onSuccess: invalidate,
   });
 }

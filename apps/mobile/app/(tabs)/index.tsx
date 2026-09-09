@@ -243,20 +243,28 @@ export default function DashboardScreen() {
           )}
         </Card>
 
+        {/*
+          The four tiles are the read-only face of the health screen, so
+          tapping one opens the place where that number is edited. That is a
+          shorter path than a tab, and it is where people already look.
+        */}
         <View style={styles.tiles}>
           <StatTile
+            onPress={() => router.push('/health')}
             label="Air"
             value={formatVolume(current.waterMl)}
             hint={targets ? `Target ${formatVolume(targets.waterMl)}` : undefined}
             accent={theme.water}
           />
           <StatTile
+            onPress={() => router.push('/health')}
             label="Tidur"
             value={current.sleepMin === null ? '—' : formatDuration(current.sleepMin)}
             hint={targets ? `Target ${formatDuration(targets.sleepMin)}` : undefined}
             accent={theme.sleep}
           />
           <StatTile
+            onPress={() => router.push('/health')}
             label="Langkah"
             value={steps === null ? '—' : steps.toLocaleString('id-ID')}
             hint={
@@ -267,6 +275,7 @@ export default function DashboardScreen() {
             accent={theme.move}
           />
           <StatTile
+            onPress={() => router.push('/health')}
             label="Berat"
             value={current.weightKg ? formatWeight(current.weightKg) : '—'}
             hint="Ditimbang hari ini"

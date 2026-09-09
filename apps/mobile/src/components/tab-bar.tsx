@@ -5,10 +5,10 @@ import type { BottomTabBarProps } from 'expo-router/tabs';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   ChartIcon,
-  HeartIcon,
   HomeIcon,
   LogIcon,
   PlusIcon,
+  UserIcon,
   type IconProps,
 } from './icons';
 import { radius, spacing, useTheme, useThemedStyles, type Theme } from '../lib/theme';
@@ -26,11 +26,18 @@ const TABS: Record<string, { label: string; Icon: (p: IconProps) => React.JSX.El
   index: { label: 'Beranda', Icon: HomeIcon },
   nutrition: { label: 'Catat', Icon: LogIcon },
   trends: { label: 'Progress', Icon: ChartIcon },
-  health: { label: 'Kesehatan', Icon: HeartIcon },
+  profil: { label: 'Profil', Icon: UserIcon },
 };
 
+/*
+ * `health` is a real route but not a tab. Four buttons plus the action button
+ * is already the most a phone bar carries comfortably, and the health screen
+ * is reached from the tiles on Beranda that show the very numbers it edits —
+ * which is a shorter path than a tab anyway.
+ */
+
 /** Two tabs, the action button, then two more. */
-const ORDER = ['index', 'nutrition', '__action__', 'trends', 'health'] as const;
+const ORDER = ['index', 'nutrition', '__action__', 'trends', 'profil'] as const;
 
 export function TabBar({ state, navigation, insets }: BottomTabBarProps) {
   const { theme } = useTheme();

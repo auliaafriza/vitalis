@@ -29,6 +29,7 @@ type ProfileRow = {
   goal: GoalType;
   timezone: string;
   onboarded_at: string | null;
+  tutorial_seen_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -192,7 +193,7 @@ export interface Database {
     Tables: {
       profiles: {
         Row: ProfileRow;
-        Insert: Insert<ProfileRow, 'created_at' | 'updated_at' | 'timezone' | 'activity_level' | 'goal'>;
+        Insert: Insert<ProfileRow, 'created_at' | 'updated_at' | 'timezone' | 'activity_level' | 'goal' | 'onboarded_at' | 'tutorial_seen_at'>;
         Update: Partial<ProfileRow>;
         Relationships: [];
       };

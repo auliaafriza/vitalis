@@ -134,6 +134,34 @@ export async function saveTargets(
   return toTargets(row);
 }
 
+/**
+ * Mark the intro slides as done — whether they were read or skipped.
+ *
+ * Skipping stamps the same column as finishing, deliberately. A person who
+ * taps "Lewati" has said what they want; showing the slides again on their
+ * next launch would be arguing with them.
+ *
+ * `null` puts it back, which is what the "Lihat tutorial lagi" button uses:
+ * the same gate that shows it to a new account then shows it again, so there
+ * is only one code path that can decide whether the tutorial appears.
+ */
+export async function setTutorialSeen(
+  client: CaloryaClient,
+  seen: boolean,
+): Promise<Profile> {
+  const userId = await requireUserId(client);
+  const row = unwrap(
+    await client
+      .from('profiles')
+      .update({ tutorial_seen_at: seen ? new Date().toISOString() : null })
+      .eq('id', userId)
+      .select()
+      .single(),
+    'setTutorialSeen',
+  );
+  return toProfile(row);
+}
+
 export async function updateProfile(
   client: CaloryaClient,
   patch: Partial<Pick<Profile, 'fullName' | 'activityLevel' | 'goal' | 'timezone' | 'heightCm'>>,

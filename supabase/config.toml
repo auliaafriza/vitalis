@@ -17,9 +17,25 @@ port = 54323
 
 [auth]
 enabled = true
+
+# ---------------------------------------------------------------------------
+# PERINGATAN: berkas ini mengatur Supabase LOKAL (`supabase start`).
+#
+# Site URL proyek yang di-hosting TIDAK diatur dari sini — tempatnya di
+# dashboard: Authentication → URL Configuration. Kalau `site_url` di bawah
+# ikut terkirim ke proyek produksi (misalnya lewat `supabase config push`),
+# tautan konfirmasi email untuk SEMUA pengguna akan menunjuk ke localhost.
+# Itu persis bug yang berulang di proyek ini. Jangan push berkas ini ke
+# proyek produksi tanpa mengganti site_url lebih dulu.
+# ---------------------------------------------------------------------------
 site_url = "http://localhost:3000"
+
+# Daftar izin tujuan redirect. Supabase hanya menghormati `emailRedirectTo`
+# kalau URL-nya cocok dengan salah satu pola di sini; kalau tidak cocok, dia
+# diam-diam kembali memakai site_url — tanpa error, tanpa peringatan.
 additional_redirect_urls = [
-  "http://localhost:3000/auth/callback",
+  "http://localhost:3000/**",
+  "https://calorya-web.vercel.app/**",
   "calorya://auth/callback",
 ]
 jwt_expiry = 3600
