@@ -12,7 +12,8 @@
       },
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://ybkrlfvtqzemhkrsfslm.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_yUHrg4gUCbiOzw_MZV77fw_NqtCQVKR"
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_yUHrg4gUCbiOzw_MZV77fw_NqtCQVKR",
+        "EXPO_PUBLIC_SITE_URL": "https://calorya-web.vercel.app"
       }
     },
     "preview": {
@@ -22,7 +23,8 @@
       },
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://ybkrlfvtqzemhkrsfslm.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_yUHrg4gUCbiOzw_MZV77fw_NqtCQVKR"
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_yUHrg4gUCbiOzw_MZV77fw_NqtCQVKR",
+        "EXPO_PUBLIC_SITE_URL": "https://calorya-web.vercel.app"
       }
     },
     "production": {
@@ -31,8 +33,10 @@
       },
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://ybkrlfvtqzemhkrsfslm.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_yUHrg4gUCbiOzw_MZV77fw_NqtCQVKR"
-      }
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_yUHrg4gUCbiOzw_MZV77fw_NqtCQVKR",
+        "EXPO_PUBLIC_SITE_URL": "https://calorya-web.vercel.app"
+      },
+      "autoIncrement": false
     }
   },
   "submit": {

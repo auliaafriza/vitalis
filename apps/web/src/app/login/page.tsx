@@ -41,16 +41,30 @@ function LoginForm() {
     try {
       const supabase = getBrowserClient();
       if (mode === 'signup') {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email: parsed.data.email,
           password: parsed.data.password,
           options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
         });
         if (error) throw error;
-        setNotice(
-          'Akun dibuat. Jika konfirmasi email diaktifkan di project Supabase kamu, cek inbox dulu sebelum masuk.',
-        );
-        setMode('signin');
+
+        /**
+         * Whether a confirmation email is required is a project setting, not
+         * something the client can know in advance — so read the answer off
+         * the response instead of guessing. With confirmation off, Supabase
+         * returns a session and the user is already signed in; telling them to
+         * "check your inbox" would strand them on the login screen in front of
+         * an email that is never coming.
+         */
+        if (data.session) {
+          router.replace(next);
+          router.refresh();
+        } else {
+          setNotice(
+            'Akun dibuat. Cek inbox untuk tautan konfirmasi, lalu masuk. Kalau tidak ada dalam beberapa menit, periksa folder spam.',
+          );
+          setMode('signin');
+        }
       } else {
         const { error } = await supabase.auth.signInWithPassword({
           email: parsed.data.email,

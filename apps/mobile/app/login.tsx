@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, ErrorNote, PasswordInput } from '../src/components/ui';
+import { authCallbackUrl } from '../src/lib/site';
 import { supabase } from '../src/lib/supabase';
 import { radius, spacing, useTheme, useThemedStyles, type Theme } from '../src/lib/theme';
 
@@ -37,10 +38,37 @@ export default function LoginScreen() {
     setBusy(true);
     try {
       if (mode === 'signup') {
-        const { error: signUpError } = await supabase.auth.signUp(parsed.data);
+        /**
+         * Without an explicit emailRedirectTo, Supabase builds the confirmation
+         * link from the project's Site URL — which is http://localhost:3000 in
+         * a fresh project, and a dead link on a phone. Pointing it at the
+         * deployed web callback is what makes the email usable.
+         *
+         * Note that Supabase only honours this if the URL is also listed under
+         * Authentication → URL Configuration → Redirect URLs. If it is not, it
+         * silently falls back to Site URL again, which is what makes this bug
+         * so confusing to chase.
+         */
+        const redirectTo = authCallbackUrl();
+        const { data, error: signUpError } = await supabase.auth.signUp({
+          ...parsed.data,
+          ...(redirectTo ? { options: { emailRedirectTo: redirectTo } } : {}),
+        });
         if (signUpError) throw signUpError;
-        setNotice('Akun dibuat. Cek email jika konfirmasi diaktifkan, lalu masuk.');
-        setMode('signin');
+
+        /**
+         * Whether a confirmation email is required is a project setting, so
+         * read the answer off the response rather than guessing. With
+         * confirmation off Supabase returns a session, the root layout picks
+         * it up and navigates — telling the user to check an inbox would be
+         * wrong, and the email is never coming.
+         */
+        if (!data.session) {
+          setNotice(
+            'Akun dibuat. Cek inbox untuk tautan konfirmasi, lalu masuk. Kalau tidak ada dalam beberapa menit, periksa folder spam.',
+          );
+          setMode('signin');
+        }
       } else {
         const { error: signInError } =
           await supabase.auth.signInWithPassword(parsed.data);
