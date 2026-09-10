@@ -2,7 +2,7 @@
   "expo": {
     "name": "Calorya",
     "slug": "calorya",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "orientation": "portrait",
     "scheme": "calorya",
     "userInterfaceStyle": "automatic",
@@ -20,7 +20,7 @@
         "NSMotionUsageDescription": "Calorya membaca data langkah dari perangkat untuk mengisi catatan aktivitas harianmu secara otomatis.",
         "NSCameraUsageDescription": "Calorya memakai kamera hanya untuk membaca barcode kemasan makanan. Tidak ada foto yang disimpan atau dikirim."
       },
-      "buildNumber": "4"
+      "buildNumber": "5"
     },
     "android": {
       "package": "com.calorya.app",
@@ -33,7 +33,7 @@
         "android.permission.CAMERA"
       ],
       "edgeToEdgeEnabled": true,
-      "versionCode": 4
+      "versionCode": 5
     },
     "plugins": [
       "expo-router",

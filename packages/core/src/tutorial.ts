@@ -66,7 +66,7 @@ export const TUTORIAL_STEPS: readonly TutorialStep[] = [
       'Salah porsi? Ketuk catatannya untuk memperbaiki',
       'Menu yang sama seperti kemarin: pakai "Salin dari kemarin"',
     ],
-    where: { web: 'halaman Catat Makanan', mobile: 'tab Catat' },
+    where: { web: 'halaman Catat Makanan', mobile: 'menu Catat' },
     tint: '#FBDDD5',
   },
   {
@@ -80,7 +80,7 @@ export const TUTORIAL_STEPS: readonly TutorialStep[] = [
       'Kelebihan satu gelas bisa dihapus dari daftarnya',
       'Berat badan menentukan ulang targetmu seiring waktu',
     ],
-    where: { web: 'halaman Kesehatan', mobile: 'tab Beranda' },
+    where: { web: 'halaman Kesehatan', mobile: 'menu Beranda' },
     tint: '#D6E9F8',
   },
   {
@@ -94,7 +94,7 @@ export const TUTORIAL_STEPS: readonly TutorialStep[] = [
       'Kalori, makronutrien, air, tidur dan berat dalam satu tempat',
       'Bisa diunduh sebagai CSV atau PDF kalau mau dibawa ke dokter',
     ],
-    where: { web: 'halaman Tren', mobile: 'tab Progress' },
+    where: { web: 'halaman Tren', mobile: 'menu Progress' },
     tint: '#D9EFD6',
   },
   {

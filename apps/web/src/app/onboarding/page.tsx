@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import { completeOnboarding } from '@calorya/api';
+import { completeOnboarding } from "@calorya/api";
 import {
   ACTIVITY_HINT,
   ACTIVITY_LABEL,
@@ -13,22 +13,31 @@ import {
   formatKcal,
   formatVolume,
   GOAL_LABEL,
+  ONBOARDING_DRAFT_KEY,
   ONBOARDING_STEPS,
   onboardingSchema,
+  parseOnboardingDraft,
+  serialiseOnboardingDraft,
   SEX_LABEL,
   todayKey,
   validateOnboardingStep,
   type ActivityLevel,
   type Goal,
   type Sex,
-} from '@calorya/core';
-import { useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
-import { Button, Card, Field, inputClass, PasswordInput } from '@/components/ui';
-import { getBrowserClient } from '@/lib/supabase/client';
+} from "@calorya/core";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Button,
+  Card,
+  Field,
+  inputClass,
+  PasswordInput,
+} from "@/components/ui";
+import { getBrowserClient } from "@/lib/supabase/client";
 
-const GOALS: Goal[] = ['lose', 'maintain', 'gain'];
-const SEXES: Sex[] = ['female', 'male'];
+const GOALS: Goal[] = ["lose", "maintain", "gain"];
+const SEXES: Sex[] = ["female", "male"];
 
 /**
  * First-login setup, in three steps.
@@ -44,7 +53,7 @@ const SEXES: Sex[] = ['female', 'male'];
 export default function OnboardingPage() {
   const router = useRouter();
   const timezone = useMemo(
-    () => Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'Asia/Jakarta',
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone ?? "Asia/Jakarta",
     [],
   );
 
@@ -52,20 +61,115 @@ export default function OnboardingPage() {
   const step = ONBOARDING_STEPS[stepIndex]!;
   const isLast = stepIndex === ONBOARDING_STEPS.length - 1;
 
-  const [fullName, setFullName] = useState('');
-  const [birthDate, setBirthDate] = useState('1998-01-01');
-  const [sex, setSex] = useState<Sex>('female');
-  const [heightCm, setHeightCm] = useState('165');
-  const [weightKg, setWeightKg] = useState('60');
-  const [activityLevel, setActivityLevel] = useState<ActivityLevel>('light');
-  const [goal, setGoal] = useState<Goal>('maintain');
+  const [fullName, setFullName] = useState("");
+  const [birthDate, setBirthDate] = useState("1998-01-01");
+  const [sex, setSex] = useState<Sex>("female");
+  const [heightCm, setHeightCm] = useState("165");
+  const [weightKg, setWeightKg] = useState("60");
+  const [activityLevel, setActivityLevel] = useState<ActivityLevel>("light");
+  const [goal, setGoal] = useState<Goal>("maintain");
   /** Optional. Empty means "keep the password chosen at sign-up". */
-  const [password, setPassword] = useState('');
+  const [password, setPassword] = useState("");
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
 
-  const values = { fullName, birthDate, sex, heightCm, weightKg, activityLevel, goal };
+  const values = {
+    fullName,
+    birthDate,
+    sex,
+    heightCm,
+    weightKg,
+    activityLevel,
+    goal,
+  };
+
+  /**
+   * Whose draft this is. Read once on mount; until it arrives nothing is
+   * written back, or the empty initial state would overwrite the answers we
+   * are about to restore.
+   */
+  const [userId, setUserId] = useState("");
+  const [restored, setRestored] = useState(false);
+
+  /*
+   * Resume where they left off.
+   *
+   * Closing the tab mid-setup used to cost every answer already given. That is
+   * precisely the moment people abandon a signup — and on the web, a tab is
+   * closed far more casually than an app is killed.
+   *
+   * Keyed to the account so a shared browser never offers one person's height
+   * to the next. The optional password is deliberately not part of the draft:
+   * a password sitting in clear text in localStorage is a real hazard, and the
+   * one field nobody minds retyping.
+   */
+  useEffect(() => {
+    let alive = true;
+    void getBrowserClient()
+      .auth.getUser()
+      .then(({ data }) => {
+        if (!alive) return;
+        const id = data.user?.id ?? "";
+        setUserId(id);
+        try {
+          const draft = parseOnboardingDraft(
+            localStorage.getItem(ONBOARDING_DRAFT_KEY),
+            id,
+          );
+          if (draft) {
+            if (draft.fullName) setFullName(draft.fullName);
+            if (draft.birthDate) setBirthDate(draft.birthDate);
+            if (draft.sex) setSex(draft.sex as Sex);
+            if (draft.heightCm) setHeightCm(draft.heightCm);
+            if (draft.weightKg) setWeightKg(draft.weightKg);
+            if (draft.activityLevel)
+              setActivityLevel(draft.activityLevel as ActivityLevel);
+            if (draft.goal) setGoal(draft.goal as Goal);
+            setStepIndex(draft.step);
+          }
+        } catch {
+          // Private windows and blocked site data both throw here. Losing the
+          // draft is the whole cost; the form still works.
+        }
+        setRestored(true);
+      })
+      .catch(() => {
+        if (alive) setRestored(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const saved = useRef("");
+  useEffect(() => {
+    if (!restored || !userId) return;
+    const payload = serialiseOnboardingDraft({
+      userId,
+      step: stepIndex,
+      ...values,
+    });
+    if (payload === saved.current) return;
+    saved.current = payload;
+    try {
+      localStorage.setItem(ONBOARDING_DRAFT_KEY, payload);
+    } catch {
+      // See above.
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    restored,
+    userId,
+    stepIndex,
+    fullName,
+    birthDate,
+    sex,
+    heightCm,
+    weightKg,
+    activityLevel,
+    goal,
+  ]);
 
   /**
    * Live preview of what the answers imply. Showing the calculated targets
@@ -78,7 +182,13 @@ export default function OnboardingPage() {
     const ageYears = Math.floor(
       (Date.now() - new Date(birthDate).getTime()) / 31_557_600_000,
     );
-    if (!Number.isFinite(h) || !Number.isFinite(w) || h < 80 || w < 20 || ageYears < 13) {
+    if (
+      !Number.isFinite(h) ||
+      !Number.isFinite(w) ||
+      h < 80 ||
+      w < 20 ||
+      ageYears < 13
+    ) {
       return null;
     }
     const targets = deriveTargets(
@@ -87,7 +197,12 @@ export default function OnboardingPage() {
       goal,
     );
     const bmiValue = bmi(w, h);
-    return { targets, bmiValue, bmiLabel: BMI_LABEL[bmiCategory(bmiValue)], ageYears };
+    return {
+      targets,
+      bmiValue,
+      bmiLabel: BMI_LABEL[bmiCategory(bmiValue)],
+      ageYears,
+    };
   }, [heightCm, weightKg, birthDate, sex, activityLevel, goal]);
 
   /** Advance only if this step's own fields are valid. */
@@ -97,10 +212,11 @@ export default function OnboardingPage() {
     // The optional password is checked here rather than on submit: it belongs
     // to the identity step, and finding out on the last screen that a password
     // typed three steps ago is too short is a miserable way to learn it.
-    if (step.id === 'identity' && password.length > 0) {
+    if (step.id === "identity" && password.length > 0) {
       const parsed = credentialsSchema.shape.password.safeParse(password);
       if (!parsed.success) {
-        stepErrors['password'] = parsed.error.issues[0]?.message ?? 'Sandi tidak valid';
+        stepErrors["password"] =
+          parsed.error.issues[0]?.message ?? "Sandi tidak valid";
       }
     }
 
@@ -124,7 +240,8 @@ export default function OnboardingPage() {
       const fieldErrors: Record<string, string> = {};
       for (const issue of parsed.error.issues) {
         const key = issue.path[0];
-        if (typeof key === 'string' && !fieldErrors[key]) fieldErrors[key] = issue.message;
+        if (typeof key === "string" && !fieldErrors[key])
+          fieldErrors[key] = issue.message;
       }
       setErrors(fieldErrors);
       // Jump back to the step that owns the first bad field, otherwise the
@@ -142,7 +259,9 @@ export default function OnboardingPage() {
       // yet and the user can correct it; doing it after would leave a profile
       // saved and a password silently unchanged.
       if (password.length > 0) {
-        const { error } = await getBrowserClient().auth.updateUser({ password });
+        const { error } = await getBrowserClient().auth.updateUser({
+          password,
+        });
         if (error) throw error;
       }
 
@@ -151,14 +270,22 @@ export default function OnboardingPage() {
         parsed.data,
         todayKey(parsed.data.timezone),
       );
+      // Saved for real; the draft has nothing left to protect.
+      try {
+        localStorage.removeItem(ONBOARDING_DRAFT_KEY);
+      } catch {
+        // Ignored: an unremovable draft is stale, not harmful — it is keyed to
+        // this account and this account is now onboarded, so the gate will
+        // never send them back to read it.
+      }
       // Straight into the intro rather than the dashboard: the numbers only
       // just came into existence, and a dashboard is a poor place to learn
       // what they mean. The app shell would bounce them here anyway.
-      router.replace('/tutorial');
+      router.replace("/tutorial");
       router.refresh();
     } catch (error) {
       setErrors({
-        form: error instanceof Error ? error.message : 'Gagal menyimpan profil',
+        form: error instanceof Error ? error.message : "Gagal menyimpan profil",
       });
     } finally {
       setBusy(false);
@@ -179,13 +306,13 @@ export default function OnboardingPage() {
             <li key={s.id} className="flex-1">
               <div
                 className={`h-1.5 rounded-full ${
-                  i <= stepIndex ? 'bg-brand-500' : 'bg-ink-800'
+                  i <= stepIndex ? "bg-brand-500" : "bg-ink-800"
                 }`}
-                aria-current={i === stepIndex ? 'step' : undefined}
+                aria-current={i === stepIndex ? "step" : undefined}
               />
               <span
                 className={`mt-1.5 block text-xs ${
-                  i <= stepIndex ? 'text-ink-300' : 'text-ink-500'
+                  i <= stepIndex ? "text-ink-300" : "text-ink-500"
                 }`}
               >
                 {s.label}
@@ -199,9 +326,9 @@ export default function OnboardingPage() {
       </header>
 
       <form onSubmit={handleSubmit} className="space-y-5" noValidate>
-        {step.id === 'identity' && (
+        {step.id === "identity" && (
           <>
-            <Field label="Nama" error={errors['fullName']}>
+            <Field label="Nama" error={errors["fullName"]}>
               <input
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
@@ -213,7 +340,7 @@ export default function OnboardingPage() {
             </Field>
 
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Tanggal lahir" error={errors['birthDate']}>
+              <Field label="Tanggal lahir" error={errors["birthDate"]}>
                 <input
                   type="date"
                   value={birthDate}
@@ -232,8 +359,8 @@ export default function OnboardingPage() {
                       aria-pressed={sex === option}
                       className={`rounded-xl border px-2 py-2.5 text-sm ${
                         sex === option
-                          ? 'border-brand-500 bg-brand-500/10 text-brand-400'
-                          : 'border-ink-700 text-ink-300'
+                          ? "border-brand-500 bg-brand-500/10 text-brand-400"
+                          : "border-ink-700 text-ink-300"
                       }`}
                     >
                       {SEX_LABEL[option]}
@@ -243,7 +370,7 @@ export default function OnboardingPage() {
               </Field>
             </div>
 
-            <Field
+            {/* <Field
               label="Ganti kata sandi (opsional)"
               hint="Kosongkan kalau sandi yang kamu buat saat daftar sudah pas."
               error={errors['password']}
@@ -253,14 +380,14 @@ export default function OnboardingPage() {
                 onChange={setPassword}
                 autoComplete="new-password"
               />
-            </Field>
+            </Field> */}
           </>
         )}
 
-        {step.id === 'body' && (
+        {step.id === "body" && (
           <>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Tinggi (cm)" error={errors['heightCm']}>
+              <Field label="Tinggi (cm)" error={errors["heightCm"]}>
                 <input
                   type="number"
                   inputMode="decimal"
@@ -270,7 +397,7 @@ export default function OnboardingPage() {
                   autoFocus
                 />
               </Field>
-              <Field label="Berat (kg)" error={errors['weightKg']}>
+              <Field label="Berat (kg)" error={errors["weightKg"]}>
                 <input
                   type="number"
                   inputMode="decimal"
@@ -283,18 +410,18 @@ export default function OnboardingPage() {
             </div>
 
             {preview && (
-              <p className="text-sm text-ink-500">
-                BMI-mu{' '}
-                <strong className="text-ink-100">
+              <p className="text-sm text-[#c07d12]">
+                BMI-mu{" "}
+                <strong className="text-[#c07d12] font-semibold">
                   {preview.bmiValue} · {preview.bmiLabel}
-                </strong>{' '}
+                </strong>{" "}
                 <span className="text-xs">(ambang WHO Asia-Pasifik)</span>
               </p>
             )}
           </>
         )}
 
-        {step.id === 'targets' && (
+        {step.id === "targets" && (
           <>
             <fieldset>
               <legend className="mb-1.5 text-sm font-medium text-ink-300">
@@ -309,8 +436,8 @@ export default function OnboardingPage() {
                     aria-pressed={activityLevel === level}
                     className={`w-full rounded-xl border px-3 py-2.5 text-left ${
                       activityLevel === level
-                        ? 'border-brand-500 bg-brand-500/10'
-                        : 'border-ink-700'
+                        ? "border-brand-500 bg-brand-500/10"
+                        : "border-ink-700"
                     }`}
                   >
                     <span className="block text-sm font-medium text-ink-100">
@@ -325,7 +452,9 @@ export default function OnboardingPage() {
             </fieldset>
 
             <fieldset>
-              <legend className="mb-1.5 text-sm font-medium text-ink-300">Tujuan</legend>
+              <legend className="mb-1.5 text-sm font-medium text-ink-300">
+                Tujuan
+              </legend>
               <div className="grid grid-cols-3 gap-2">
                 {GOALS.map((option) => (
                   <button
@@ -335,8 +464,8 @@ export default function OnboardingPage() {
                     aria-pressed={goal === option}
                     className={`rounded-xl border px-2 py-3 text-xs ${
                       goal === option
-                        ? 'border-brand-500 bg-brand-500/10 text-brand-400'
-                        : 'border-ink-700 text-ink-300'
+                        ? "border-brand-500 bg-brand-500/10 text-brand-400"
+                        : "border-ink-700 text-ink-300"
                     }`}
                   >
                     {GOAL_LABEL[option]}
@@ -347,30 +476,48 @@ export default function OnboardingPage() {
 
             {preview && (
               <Card className="space-y-3">
-                <p className="text-sm font-medium text-ink-300">Target harianmu nanti</p>
+                <p className="text-sm font-medium text-ink-300">
+                  Target harianmu nanti
+                </p>
                 <div className="grid grid-cols-2 gap-3 text-sm">
-                  <Preview label="Kalori" value={formatKcal(preview.targets.kcal)} />
-                  <Preview label="Protein" value={`${preview.targets.proteinG} g`} />
-                  <Preview label="Karbohidrat" value={`${preview.targets.carbsG} g`} />
+                  <Preview
+                    label="Kalori"
+                    value={formatKcal(preview.targets.kcal)}
+                  />
+                  <Preview
+                    label="Protein"
+                    value={`${preview.targets.proteinG} g`}
+                  />
+                  <Preview
+                    label="Karbohidrat"
+                    value={`${preview.targets.carbsG} g`}
+                  />
                   <Preview label="Lemak" value={`${preview.targets.fatG} g`} />
-                  <Preview label="Air" value={formatVolume(preview.targets.waterMl)} />
+                  <Preview
+                    label="Air"
+                    value={formatVolume(preview.targets.waterMl)}
+                  />
                   <Preview
                     label="BMI"
                     value={`${preview.bmiValue} · ${preview.bmiLabel}`}
                   />
                 </div>
                 <p className="text-xs text-ink-500">
-                  Dihitung dengan rumus Mifflin-St Jeor. Kategori BMI memakai ambang
-                  batas WHO Asia-Pasifik. Ini estimasi, bukan saran medis.
+                  Dihitung dengan rumus Mifflin-St Jeor. Kategori BMI memakai
+                  ambang batas WHO Asia-Pasifik. Ini estimasi, bukan saran
+                  medis.
                 </p>
               </Card>
             )}
           </>
         )}
 
-        {errors['form'] && (
-          <p role="alert" className="rounded-xl bg-red-500/10 p-3 text-sm text-red-300">
-            {errors['form']}
+        {errors["form"] && (
+          <p
+            role="alert"
+            className="rounded-xl bg-red-500/10 p-3 text-sm text-red-300"
+          >
+            {errors["form"]}
           </p>
         )}
 
@@ -389,13 +536,13 @@ export default function OnboardingPage() {
             </Button>
           )}
           <Button type="submit" disabled={busy} className="flex-1">
-            {busy ? 'Menyimpan…' : isLast ? 'Simpan & mulai' : 'Lanjut'}
+            {busy ? "Menyimpan…" : isLast ? "Simpan & mulai" : "Lanjut"}
           </Button>
         </div>
 
         <p className="text-center text-xs text-ink-500">
-          Langkah {stepIndex + 1} dari {ONBOARDING_STEPS.length} · semuanya bisa diubah
-          lagi di Pengaturan
+          Langkah {stepIndex + 1} dari {ONBOARDING_STEPS.length} · semuanya bisa
+          diubah lagi di Pengaturan
         </p>
       </form>
     </main>

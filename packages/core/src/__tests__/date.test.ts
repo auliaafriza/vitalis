@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   addDays,
+  daysInMonth,
   dateRange,
   daysBetween,
   formatDuration,
@@ -95,5 +96,17 @@ describe('durations', () => {
     expect(formatDuration(480)).toBe('8j');
     expect(formatDuration(45)).toBe('45m');
     expect(formatDuration(-10)).toBe('0m');
+  });
+});
+
+describe('helper pemilih tanggal', () => {
+  it('menghitung panjang bulan, termasuk tahun kabisat', () => {
+    expect(daysInMonth(2026, 1)).toBe(31);
+    expect(daysInMonth(2026, 4)).toBe(30);
+    expect(daysInMonth(2026, 2)).toBe(28);
+    // Kabisat: 2024 habis dibagi 4, 2000 habis dibagi 400, 1900 tidak.
+    expect(daysInMonth(2024, 2)).toBe(29);
+    expect(daysInMonth(2000, 2)).toBe(29);
+    expect(daysInMonth(1900, 2)).toBe(28);
   });
 });

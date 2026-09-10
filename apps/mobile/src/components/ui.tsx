@@ -267,7 +267,7 @@ export function ProgressBar({
       accessibilityRole="progressbar"
       accessibilityLabel={label}
       accessibilityValue={{ min: 0, max: Math.round(max), now: Math.round(value) }}
-      style={[styles.progressTrack, { height, borderRadius: height / 2 }]}
+      style={[styles.progressTrack, { height, borderRadius: height / 2 , marginBottom: 10}]}
     >
       <View
         style={{
@@ -504,7 +504,7 @@ const makeStyles = (theme: Theme) =>
     },
     sectionTitle: {
       color: theme.textMuted,
-      fontSize: 12,
+      fontSize: 13,
       fontWeight: '600',
       letterSpacing: 0.6,
       textTransform: 'uppercase',
@@ -539,21 +539,21 @@ const makeStyles = (theme: Theme) =>
       padding: spacing.lg,
       gap: spacing.md,
     },
-    confirmTitle: { color: theme.text, fontSize: 17, fontWeight: '700' },
-    confirmBody: { color: theme.textMuted, fontSize: 14, lineHeight: 21 },
+    confirmTitle: { color: theme.text, fontSize: 18, fontWeight: '700' },
+    confirmBody: { color: theme.textMuted, fontSize: 15, lineHeight: 21 },
     confirmActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
     buttonDisabled: { opacity: 0.5 },
     buttonPressed: { opacity: 0.85 },
-    buttonTextPrimary: { color: theme.onBrand, fontWeight: '700', fontSize: 15 },
-    buttonTextGhost: { color: theme.text, fontWeight: '600', fontSize: 15 },
+    buttonTextPrimary: { color: theme.onBrand, fontWeight: '700', fontSize: 16 },
+    buttonTextGhost: { color: theme.text, fontWeight: '600', fontSize: 16 },
     progressTrack: {
       backgroundColor: theme.surfaceAlt,
       overflow: 'hidden',
       width: '100%',
     },
     macro: { flex: 1, gap: 6 },
-    macroLabel: { color: theme.textDim, fontSize: 11, fontWeight: '600' },
-    macroValue: { color: theme.text, fontSize: 12, fontWeight: '700' },
+    macroLabel: { color: theme.textDim, fontSize: 12, fontWeight: '600' },
+    macroValue: { color: theme.text, fontSize: 13, fontWeight: '700' },
     macroTarget: { color: theme.textDim, fontWeight: '400' },
     segmented: {
       flexDirection: 'row',
@@ -569,7 +569,7 @@ const makeStyles = (theme: Theme) =>
       alignItems: 'center',
     },
     segmentActive: { backgroundColor: theme.surface },
-    segmentText: { color: theme.textDim, fontSize: 12, fontWeight: '600' },
+    segmentText: { color: theme.textDim, fontSize: 13, fontWeight: '600' },
     segmentTextActive: { color: theme.text },
     tile: {
       flex: 1,
@@ -582,10 +582,10 @@ const makeStyles = (theme: Theme) =>
     },
     tileHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     dot: { width: 8, height: 8, borderRadius: 4 },
-    tileLabel: { color: theme.textDim, fontSize: 12, fontWeight: '500' },
-    tileValue: { color: theme.text, fontSize: 20, fontWeight: '700', marginTop: 6 },
-    tileUnit: { color: theme.textDim, fontSize: 13, fontWeight: '400' },
-    tileHint: { color: theme.textDim, fontSize: 11, marginTop: 2 },
+    tileLabel: { color: theme.textDim, fontSize: 13, fontWeight: '500' },
+    tileValue: { color: theme.text, fontSize: 22, fontWeight: '700', marginTop: 6 },
+    tileUnit: { color: theme.textDim, fontSize: 14, fontWeight: '400' },
+    tileHint: { color: theme.textDim, fontSize: 12, marginTop: 2 },
     empty: {
       borderWidth: 1,
       borderStyle: 'dashed',
@@ -598,7 +598,7 @@ const makeStyles = (theme: Theme) =>
     emptyAction: { marginTop: spacing.md, alignSelf: 'stretch' },
     emptyBody: {
       color: theme.textDim,
-      fontSize: 13,
+      fontSize: 14,
       textAlign: 'center',
       marginTop: 4,
     },
@@ -616,7 +616,7 @@ const makeStyles = (theme: Theme) =>
       paddingHorizontal: spacing.md,
       paddingVertical: 12,
       color: theme.text,
-      fontSize: 15,
+      fontSize: 16,
     },
     passwordToggle: { padding: 4 },
     errorBox: {
@@ -626,5 +626,5 @@ const makeStyles = (theme: Theme) =>
       borderRadius: radius.md,
       padding: spacing.md,
     },
-    errorText: { color: theme.danger, fontSize: 13 },
+    errorText: { color: theme.danger, fontSize: 14 },
   });

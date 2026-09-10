@@ -5,7 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { nextRoute } from '@calorya/core';
+import { isAccountGone, nextRoute } from '@calorya/core';
 import { ThemeProvider, useTheme } from '../src/lib/theme';
 import { supabase } from '../src/lib/supabase';
 
@@ -96,26 +96,69 @@ export default function RootLayout() {
       return;
     }
     let alive = true;
-    supabase
-      .from('profiles')
-      .select('onboarded_at, tutorial_seen_at')
-      .eq('id', session.user.id)
-      .maybeSingle()
-      .then(({ data, error }) => {
+    void (async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('onboarded_at, tutorial_seen_at')
+        .eq('id', session.user.id)
+        .maybeSingle();
+      if (!alive) return;
+
+      if (error) {
+        // A failed lookup is not evidence of anything. Assume both are done:
+        // sending someone who already filled the form back through it is
+        // worse than the alternative, and the screens below degrade
+        // gracefully without a profile.
+        setGate({ onboarded: true, tutorialSeen: true });
+        return;
+      }
+
+      if (!data) {
+        /*
+         * Signed in, but the account has no profile row. Two causes, and they
+         * need opposite treatment, so ask the server which it is.
+         *
+         * The session lives in AsyncStorage and its access token stays
+         * syntactically valid for an hour after the account behind it is
+         * deleted. The app therefore believes it is signed in, finds no
+         * profile, concludes "not onboarded", and pins the person to the
+         * setup form — where every attempt to finish fails against a user
+         * that no longer exists. Deleting a test account in the dashboard is
+         * exactly how someone ends up permanently stuck on onboarding.
+         *
+         * `getUser()` is a network call, so it asks the server rather than
+         * the token. Gone means gone: drop the local session and let the gate
+         * send them to /login, where they can sign in or register again.
+         */
+        const { data: live, error: liveError } = await supabase.auth.getUser();
         if (!alive) return;
-        // On a failed lookup, assume both are done: sending someone who
-        // already filled the form back through it is worse than the
-        // alternative, and the screens below degrade gracefully without a
-        // profile.
-        setGate(
-          error
-            ? { onboarded: true, tutorialSeen: true }
-            : {
-                onboarded: Boolean(data?.onboarded_at),
-                tutorialSeen: Boolean(data?.tutorial_seen_at),
-              },
-        );
+
+        /*
+         * Only an authoritative refusal signs anyone out. Treating any error
+         * as "account deleted" would eject someone who merely reopened the
+         * app on a bad connection — losing the very setup progress they were
+         * halfway through. `isAccountGone` draws that line, and its tests
+         * pin it down.
+         */
+        if (isAccountGone(liveError, live.user)) {
+          await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+          queryClient.clear();
+          if (alive) setSession(null);
+          return;
+        }
+
+        // The account is real, the profile row simply never got created —
+        // an account older than the trigger, or one it failed for. Setup can
+        // fix that now that completeOnboarding upserts the row.
+        setGate({ onboarded: false, tutorialSeen: false });
+        return;
+      }
+
+      setGate({
+        onboarded: Boolean(data.onboarded_at),
+        tutorialSeen: Boolean(data.tutorial_seen_at),
       });
+    })();
     return () => {
       alive = false;
     };

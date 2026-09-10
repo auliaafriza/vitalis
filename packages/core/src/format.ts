@@ -136,6 +136,22 @@ const MONTH_NAMES = [
   'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
 ];
 
+/** Full month names, for a date picker where "Agu" would read as an error. */
+export const MONTH_NAMES_FULL = [
+  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
+] as const;
+
+/**
+ * "2026-04-12" -> "12 April 2026". For fields a person reads back to check,
+ * where the abbreviated form invites a second glance.
+ */
+export function formatFullDate(dateKey: string): string {
+  const [y, m, d] = dateKey.split('-').map(Number);
+  if (y === undefined || m === undefined || d === undefined) return dateKey;
+  return `${d} ${MONTH_NAMES_FULL[m - 1] ?? m} ${y}`;
+}
+
 /** "2026-08-31" -> "Sen, 31 Agu" — parsed as UTC so the label never shifts. */
 export function formatDayLabel(dateKey: string): string {
   const [y, m, d] = dateKey.split('-').map(Number);

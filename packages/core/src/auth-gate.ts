@@ -56,3 +56,30 @@ export function nextRoute(state: GateState): GateRoute {
   // navigation.
   return at === 'app' ? null : '/app';
 }
+
+/**
+ * Is this session pointing at an account that no longer exists?
+ *
+ * Asked after a profile lookup comes back empty. The answer decides between
+ * two opposite actions, and getting it wrong is costly in both directions:
+ * treating a dead account as alive pins the person to a setup form that can
+ * never save, and treating a live account as dead signs out someone who was
+ * merely offline — losing their place mid-setup.
+ *
+ * So only an *authoritative* refusal counts. `getUser()` is a network call:
+ * when it cannot reach the server at all, supabase-js reports a retryable
+ * fetch error, and that is evidence of a bad connection, not a deleted user.
+ * A 401 or 403 is the server itself saying the token belongs to nobody.
+ */
+export function isAccountGone(
+  error: { status?: number; name?: string } | null | undefined,
+  user: unknown,
+): boolean {
+  if (!error) return !user;
+
+  // No connection, or the request never completed. Say nothing.
+  if (error.name === 'AuthRetryableFetchError') return false;
+  if (error.status === undefined || error.status === 0) return false;
+
+  return error.status === 401 || error.status === 403 || error.status === 404;
+}

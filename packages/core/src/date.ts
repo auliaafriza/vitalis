@@ -91,3 +91,14 @@ export function formatDuration(minutes: number): string {
   if (m === 0) return `${h}j`;
   return `${h}j ${m}m`;
 }
+
+/**
+ * How many days a month has, leap years included.
+ *
+ * Day 0 of the *next* month is the last day of this one — the standard trick,
+ * and the reason this needs no leap-year rule of its own to get 2024, 2000
+ * and 1900 right. `month1` is 1-based, like a person would write it.
+ */
+export function daysInMonth(year: number, month1: number): number {
+  return new Date(Date.UTC(year, month1, 0)).getUTCDate();
+}

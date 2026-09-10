@@ -119,7 +119,7 @@ const makeStyles = (theme: Theme) =>
       paddingHorizontal: spacing.xs,
     },
     tab: { flex: 1, alignItems: 'center', gap: 3, paddingTop: 2 },
-    label: { fontSize: 10, fontWeight: '600' },
+    label: { fontSize: 11, fontWeight: '600' },
     labelActive: { fontWeight: '700' },
     actionSlot: { flex: 1, alignItems: 'center' },
     action: {

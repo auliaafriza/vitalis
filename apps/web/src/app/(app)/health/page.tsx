@@ -334,7 +334,7 @@ function WeightCard({ day, heightCm }: { day: string; heightCm: number | null })
       </form>
 
       {bmiValue !== null && (
-        <p className="mt-2 text-xs text-ink-500">
+        <p className="mt-2 text-xs text-[#c07d12]">
           BMI {bmiValue} · {BMI_LABEL[bmiCategory(bmiValue)]} (ambang WHO Asia-Pasifik)
         </p>
       )}

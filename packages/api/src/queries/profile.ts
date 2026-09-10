@@ -53,20 +53,40 @@ export async function completeOnboarding(
 ): Promise<Targets> {
   const userId = await requireUserId(client);
 
+  /*
+   * Upsert, not update.
+   *
+   * `handle_new_user` normally creates the profile row the moment the account
+   * is created, so an UPDATE was enough — until a row went missing. Then the
+   * update matched nothing, `.single()` threw, and the person was pinned to
+   * the setup form forever: every attempt to finish it failed, and the gate
+   * would not let them past until it succeeded.
+   *
+   * Rows go missing for ordinary reasons — an account created before the
+   * trigger existed, a trigger added after the fact, a row deleted by hand
+   * during testing. None of them deserve an account that cannot be used.
+   *
+   * The insert still cannot invent an account: `profiles.id` references
+   * auth.users, so a session whose user has been deleted fails here with a
+   * foreign-key error rather than quietly creating an orphan.
+   */
   unwrap(
     await client
       .from('profiles')
-      .update({
-        full_name: input.fullName,
-        birth_date: input.birthDate,
-        sex: input.sex,
-        height_cm: input.heightCm,
-        activity_level: input.activityLevel,
-        goal: input.goal,
-        timezone: input.timezone,
-        onboarded_at: new Date().toISOString(),
-      })
-      .eq('id', userId)
+      .upsert(
+        {
+          id: userId,
+          full_name: input.fullName,
+          birth_date: input.birthDate,
+          sex: input.sex,
+          height_cm: input.heightCm,
+          activity_level: input.activityLevel,
+          goal: input.goal,
+          timezone: input.timezone,
+          onboarded_at: new Date().toISOString(),
+        },
+        { onConflict: 'id' },
+      )
       .select()
       .single(),
     'completeOnboarding/profile',

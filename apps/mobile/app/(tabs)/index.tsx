@@ -11,17 +11,24 @@ import {
   todayKey,
   type DaySummary,
   type MealType,
-} from '@calorya/core';
-import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+} from "@calorya/core";
+import { useRouter } from "expo-router";
+import { useMemo, useState } from "react";
+import {
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import {
   CalendarIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   PlusIcon,
-} from '../../src/components/icons';
+} from "../../src/components/icons";
 import {
   Button,
   Card,
@@ -29,7 +36,7 @@ import {
   MacroBar,
   Ring,
   StatTile,
-} from '../../src/components/ui';
+} from "../../src/components/ui";
 import {
   useAddWater,
   useDaySummaries,
@@ -37,18 +44,23 @@ import {
   useFoodEntries,
   useProfile,
   useTargets,
-} from '../../src/lib/hooks';
+} from "../../src/lib/hooks";
 import {
   radius,
   spacing,
   useTheme,
   useThemedStyles,
   type Theme,
-} from '../../src/lib/theme';
-import { usePedometer } from '../../src/lib/use-pedometer';
+} from "../../src/lib/theme";
+import { usePedometer } from "../../src/lib/use-pedometer";
 
 const QUICK_WATER = [200, 350, 500] as const;
-const MEAL_ORDER: readonly MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
+const MEAL_ORDER: readonly MealType[] = [
+  "breakfast",
+  "lunch",
+  "dinner",
+  "snack",
+];
 
 const EMPTY_DAY = (day: string): DaySummary => ({
   loggedOn: day,
@@ -73,7 +85,7 @@ export default function DashboardScreen() {
   const timezone =
     profile?.timezone ??
     Intl.DateTimeFormat().resolvedOptions().timeZone ??
-    'Asia/Jakarta';
+    "Asia/Jakarta";
   const today = todayKey(timezone);
 
   // The header steps through days. Forward is capped at today: there is
@@ -93,7 +105,11 @@ export default function DashboardScreen() {
   const pedometer = usePedometer(timezone);
 
   const streak = useMemo(
-    () => currentStreak((recent ?? []).map((s) => s.loggedOn), today),
+    () =>
+      currentStreak(
+        (recent ?? []).map((s) => s.loggedOn),
+        today,
+      ),
     [recent, today],
   );
 
@@ -108,14 +124,15 @@ export default function DashboardScreen() {
     for (const entry of entries ?? []) {
       totals.set(entry.meal, (totals.get(entry.meal) ?? 0) + entry.kcal);
     }
-    return MEAL_ORDER.map((meal) => ({ meal, kcal: totals.get(meal) ?? 0 })).filter(
-      (row) => row.kcal > 0,
-    );
+    return MEAL_ORDER.map((meal) => ({
+      meal,
+      kcal: totals.get(meal) ?? 0,
+    })).filter((row) => row.kcal > 0);
   }, [entries]);
 
   if (error) {
     return (
-      <SafeAreaView edges={['top']} style={styles.screen}>
+      <SafeAreaView edges={["top"]} style={styles.screen}>
         <View style={{ padding: spacing.lg }}>
           <ErrorNote error={error} />
         </View>
@@ -124,7 +141,7 @@ export default function DashboardScreen() {
   }
 
   return (
-    <SafeAreaView edges={['top']} style={styles.screen}>
+    <SafeAreaView edges={["top"]} style={styles.screen}>
       <ScrollView
         contentContainerStyle={styles.content}
         refreshControl={
@@ -138,7 +155,8 @@ export default function DashboardScreen() {
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
             <Text style={styles.greeting}>
-              Halo{profile?.fullName ? `, ${profile.fullName.split(' ')[0]}` : ''}
+              Halo
+              {profile?.fullName ? `, ${profile.fullName.split(" ")[0]}` : ""}
             </Text>
             <Text style={styles.title}>{relativeDayLabel(day, today)}</Text>
           </View>
@@ -161,7 +179,9 @@ export default function DashboardScreen() {
             </Pressable>
             <View style={styles.dayNavLabel}>
               <CalendarIcon color={theme.textDim} size={15} weight={1.8} />
-              <Text style={styles.dayNavText}>{relativeDayLabel(day, today)}</Text>
+              <Text style={styles.dayNavText}>
+                {relativeDayLabel(day, today)}
+              </Text>
             </View>
             <Pressable
               accessibilityRole="button"
@@ -179,12 +199,16 @@ export default function DashboardScreen() {
           </View>
 
           <View style={styles.ringWrap}>
-            <Ring progress={current.kcal / targetKcal} color={theme.food} size={182}>
+            <Ring
+              progress={current.kcal / targetKcal}
+              color={theme.food}
+              size={182}
+            >
               <Text style={styles.ringValue}>
-                {Math.round(current.kcal).toLocaleString('id-ID')}
+                {Math.round(current.kcal).toLocaleString("id-ID")}
               </Text>
               <Text style={styles.ringTarget}>
-                dari {targetKcal.toLocaleString('id-ID')} kal
+                dari {targetKcal.toLocaleString("id-ID")} kal
               </Text>
             </Ring>
           </View>
@@ -218,7 +242,7 @@ export default function DashboardScreen() {
 
           <Button
             label="Catat Makanan"
-            onPress={() => router.push('/nutrition?add=1')}
+            onPress={() => router.push("/nutrition?add=1")}
             icon={<PlusIcon color={theme.onBrand} size={18} weight={2.4} />}
             style={{ marginTop: spacing.lg }}
           />
@@ -233,7 +257,9 @@ export default function DashboardScreen() {
           ) : (
             byMeal.map((row) => (
               <View key={row.meal} style={styles.mealRow}>
-                <View style={[styles.mealDot, { backgroundColor: theme.brandSoft }]}>
+                <View
+                  style={[styles.mealDot, { backgroundColor: theme.brandSoft }]}
+                >
                   <Text style={styles.mealEmoji}>{MEAL_EMOJI[row.meal]}</Text>
                 </View>
                 <Text style={styles.mealName}>{MEAL_LABEL[row.meal]}</Text>
@@ -250,41 +276,47 @@ export default function DashboardScreen() {
         */}
         <View style={styles.tiles}>
           <StatTile
-            onPress={() => router.push('/health')}
+            onPress={() => router.push("/health")}
             label="Air"
             value={formatVolume(current.waterMl)}
-            hint={targets ? `Target ${formatVolume(targets.waterMl)}` : undefined}
+            hint={
+              targets ? `Target ${formatVolume(targets.waterMl)}` : undefined
+            }
             accent={theme.water}
           />
           <StatTile
-            onPress={() => router.push('/health')}
+            onPress={() => router.push("/health")}
             label="Tidur"
-            value={current.sleepMin === null ? '—' : formatDuration(current.sleepMin)}
-            hint={targets ? `Target ${formatDuration(targets.sleepMin)}` : undefined}
+            value={
+              current.sleepMin === null ? "—" : formatDuration(current.sleepMin)
+            }
+            hint={
+              targets ? `Target ${formatDuration(targets.sleepMin)}` : undefined
+            }
             accent={theme.sleep}
           />
           <StatTile
-            onPress={() => router.push('/health')}
+            onPress={() => router.push("/health")}
             label="Langkah"
-            value={steps === null ? '—' : steps.toLocaleString('id-ID')}
+            value={steps === null ? "—" : steps.toLocaleString("id-ID")}
             hint={
               pedometer.available === false
-                ? 'Sensor tidak tersedia'
-                : (pedometer.error ?? 'Dari sensor perangkat')
+                ? "Sensor tidak tersedia"
+                : "Error dari sensor perangkat"
             }
             accent={theme.move}
           />
           <StatTile
-            onPress={() => router.push('/health')}
+            onPress={() => router.push("/health")}
             label="Berat"
-            value={current.weightKg ? formatWeight(current.weightKg) : '—'}
+            value={current.weightKg ? formatWeight(current.weightKg) : "—"}
             hint="Ditimbang hari ini"
             accent={theme.body}
           />
         </View>
 
         <Card>
-          <Text style={styles.cardTitle}>Tambah air cepat</Text>
+          <Text style={styles.cardTitle}>Air Minum</Text>
           <View style={styles.quickRow}>
             {QUICK_WATER.map((ml) => (
               <Button
@@ -304,10 +336,10 @@ export default function DashboardScreen() {
 }
 
 const MEAL_EMOJI: Record<MealType, string> = {
-  breakfast: '🥣',
-  lunch: '🍱',
-  dinner: '🍲',
-  snack: '🍎',
+  breakfast: "🥣",
+  lunch: "🍱",
+  dinner: "🍲",
+  snack: "🍎",
 };
 
 const makeStyles = (theme: Theme) =>
@@ -318,42 +350,42 @@ const makeStyles = (theme: Theme) =>
       gap: spacing.lg,
       paddingBottom: spacing.xxl * 2,
     },
-    header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-    greeting: { color: theme.textDim, fontSize: 13 },
-    title: { color: theme.text, fontSize: 22, fontWeight: '700' },
+    header: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+    greeting: { color: theme.textDim, fontSize: 14 },
+    title: { color: theme.text, fontSize: 24, fontWeight: "700" },
     streak: {
       backgroundColor: theme.brandSoft,
       paddingHorizontal: spacing.md,
       paddingVertical: 6,
       borderRadius: radius.pill,
     },
-    streakText: { color: theme.brand, fontWeight: '700', fontSize: 12 },
+    streakText: { color: theme.brand, fontWeight: "700", fontSize: 13 },
     dayNav: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
     },
-    dayNavLabel: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    dayNavText: { color: theme.textMuted, fontSize: 13, fontWeight: '600' },
-    ringWrap: { alignItems: 'center', marginVertical: spacing.lg },
-    ringValue: { color: theme.text, fontSize: 34, fontWeight: '700' },
-    ringTarget: { color: theme.textDim, fontSize: 12, marginTop: 2 },
+    dayNavLabel: { flexDirection: "row", alignItems: "center", gap: 6 },
+    dayNavText: { color: theme.textMuted, fontSize: 14, fontWeight: "600" },
+    ringWrap: { alignItems: "center", marginVertical: spacing.lg },
+    ringValue: { color: theme.text, fontSize: 36, fontWeight: "700" },
+    ringTarget: { color: theme.textDim, fontSize: 13, marginTop: 2 },
     remaining: {
       color: theme.textMuted,
-      fontSize: 13,
-      textAlign: 'center',
+      fontSize: 14,
+      textAlign: "center",
       marginBottom: spacing.lg,
     },
-    macros: { flexDirection: 'row', gap: spacing.md },
+    macros: { flexDirection: "row", gap: spacing.md },
     cardTitle: {
       color: theme.text,
-      fontSize: 15,
-      fontWeight: '700',
+      fontSize: 16,
+      fontWeight: "700",
       marginBottom: spacing.md,
     },
     mealRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: spacing.md,
       paddingVertical: 10,
     },
@@ -361,13 +393,13 @@ const makeStyles = (theme: Theme) =>
       width: 36,
       height: 36,
       borderRadius: radius.md,
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
     },
-    mealEmoji: { fontSize: 17 },
-    mealName: { flex: 1, color: theme.text, fontSize: 14, fontWeight: '600' },
-    mealKcal: { color: theme.textMuted, fontSize: 13, fontWeight: '600' },
-    mealEmpty: { color: theme.textDim, fontSize: 13 },
-    tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
-    quickRow: { flexDirection: 'row', gap: spacing.sm },
+    mealEmoji: { fontSize: 18 },
+    mealName: { flex: 1, color: theme.text, fontSize: 15, fontWeight: "600" },
+    mealKcal: { color: theme.textMuted, fontSize: 14, fontWeight: "600" },
+    mealEmpty: { color: theme.textDim, fontSize: 14 },
+    tiles: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md },
+    quickRow: { flexDirection: "row", gap: spacing.sm },
   });

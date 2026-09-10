@@ -61,16 +61,6 @@ export const ONBOARDING_STEPS: readonly OnboardingStep[] = [
   },
 ] as const;
 
-/**
- * Validate one step's fields against the real schema.
- *
- * Deliberately reuses `onboardingSchema` rather than re-stating the rules per
- * step: a second copy of "tinggi minimal 80 cm" is a second copy that can
- * disagree with the first, and the one people would hit is whichever the UI
- * checks — not the one the database trusts.
- *
- * Returns a message per invalid field, empty when the step is complete.
- */
 export function validateOnboardingStep(
   step: OnboardingStepId,
   values: Record<string, unknown>,

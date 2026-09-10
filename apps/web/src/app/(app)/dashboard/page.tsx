@@ -281,7 +281,7 @@ export default function DashboardPage() {
             </Link>
           }
         >
-          Tambah air cepat
+          Air Minum
         </SectionTitle>
         <div className="flex gap-2">
           {QUICK_WATER.map((ml) => (

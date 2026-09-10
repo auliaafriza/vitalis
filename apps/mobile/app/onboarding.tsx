@@ -11,8 +11,11 @@ import {
   formatKcal,
   formatVolume,
   GOAL_LABEL,
+  ONBOARDING_DRAFT_KEY,
   ONBOARDING_STEPS,
   onboardingSchema,
+  parseOnboardingDraft,
+  serialiseOnboardingDraft,
   SEX_LABEL,
   todayKey,
   validateOnboardingStep,
@@ -20,8 +23,9 @@ import {
   type Goal,
   type Sex,
 } from '@calorya/core';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -35,6 +39,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CheckIcon } from '../src/components/icons';
 import { Button, Card, ErrorNote, PasswordInput } from '../src/components/ui';
+import { DateField } from '../src/components/date-field';
 import { supabase } from '../src/lib/supabase';
 import { useSession } from './_layout';
 import {
@@ -64,7 +69,7 @@ const GOALS: readonly Goal[] = ['lose', 'maintain', 'gain'];
 export default function OnboardingScreen() {
   const { theme } = useTheme();
   const styles = useThemedStyles(makeStyles);
-  const { refreshGate } = useSession();
+  const { session, refreshGate } = useSession();
   const queryClient = useQueryClient();
 
   const [fullName, setFullName] = useState('');
@@ -84,6 +89,13 @@ export default function OnboardingScreen() {
   const [stepIndex, setStepIndex] = useState(0);
   const step = ONBOARDING_STEPS[stepIndex]!;
   const isLast = stepIndex === ONBOARDING_STEPS.length - 1;
+
+  const userId = session?.user.id ?? '';
+  /**
+   * Until the saved draft has been read, nothing is written back — otherwise
+   * the empty initial state would overwrite the answers we are about to load.
+   */
+  const [restored, setRestored] = useState(false);
 
   const timezone =
     Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'Asia/Jakarta';
@@ -109,6 +121,60 @@ export default function OnboardingScreen() {
   }, [birthDate, sex, heightCm, weightKg, activityLevel, goal]);
 
   const values = { fullName, birthDate, sex, heightCm, weightKg, activityLevel, goal };
+
+  /*
+   * Resume where they left off.
+   *
+   * Being interrupted mid-setup — a call, a battery warning, going to find the
+   * bathroom scales — used to cost every answer already given, because closing
+   * the app dropped the component state and reopening rebuilt it empty. That
+   * is precisely the moment people abandon a signup.
+   *
+   * The draft is keyed to the account, so a shared phone never offers one
+   * person's height to the next. The optional password is not part of it: a
+   * password sitting in clear text in device storage is a real hazard, and the
+   * one field nobody minds retyping.
+   */
+  useEffect(() => {
+    if (!userId) return;
+    let alive = true;
+    void AsyncStorage.getItem(ONBOARDING_DRAFT_KEY)
+      .then((raw) => {
+        if (!alive) return;
+        const draft = parseOnboardingDraft(raw, userId);
+        if (draft) {
+          if (draft.fullName) setFullName(draft.fullName);
+          if (draft.birthDate) setBirthDate(draft.birthDate);
+          if (draft.sex) setSex(draft.sex as Sex);
+          if (draft.heightCm) setHeightCm(draft.heightCm);
+          if (draft.weightKg) setWeightKg(draft.weightKg);
+          if (draft.activityLevel) setActivityLevel(draft.activityLevel as ActivityLevel);
+          if (draft.goal) setGoal(draft.goal as Goal);
+          setStepIndex(draft.step);
+        }
+        setRestored(true);
+      })
+      .catch(() => {
+        // Unreadable storage costs the draft, nothing else.
+        if (alive) setRestored(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [userId]);
+
+  // Save on every change. AsyncStorage writes are cheap next to the cost of
+  // losing the answers, and a debounce would drop the last keystrokes exactly
+  // when the app is being killed — the case this exists for.
+  const saved = useRef('');
+  useEffect(() => {
+    if (!restored || !userId) return;
+    const payload = serialiseOnboardingDraft({ userId, step: stepIndex, ...values });
+    if (payload === saved.current) return;
+    saved.current = payload;
+    void AsyncStorage.setItem(ONBOARDING_DRAFT_KEY, payload).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restored, userId, stepIndex, fullName, birthDate, sex, heightCm, weightKg, activityLevel, goal]);
 
   /** Advance only if this step's own fields are valid. */
   function next() {
@@ -169,6 +235,8 @@ export default function OnboardingScreen() {
       }
 
       await completeOnboarding(supabase, parsed.data, todayKey(parsed.data.timezone));
+      // Saved for real; the draft has nothing left to protect.
+      void AsyncStorage.removeItem(ONBOARDING_DRAFT_KEY).catch(() => {});
       // The profile and targets both changed; nothing cached is still true.
       queryClient.clear();
       // Navigating from here would race the root gate, which still holds
@@ -226,16 +294,20 @@ export default function OnboardingScreen() {
               />
             </Field>
 
-            <Field label="Tanggal lahir" error={errors['birthDate']} styles={styles}>
-              <TextInput
+            {/*
+              A picker, not a text box. Asking someone to type "1996-04-12"
+              means asking them to know a format, and rejecting "12/04/1996"
+              — which is how most people here would write it.
+            */}
+            <View style={{ marginBottom: spacing.md }}>
+              <DateField
+                label="Tanggal lahir"
                 value={birthDate}
-                onChangeText={setBirthDate}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor={theme.textDim}
-                keyboardType="numbers-and-punctuation"
-                style={styles.input}
+                onChange={setBirthDate}
+                error={errors['birthDate']}
+                maxYear={new Date().getFullYear() - 13}
               />
-            </Field>
+            </View>
 
             <Field label="Jenis kelamin" styles={styles}>
               <View style={styles.row}>
@@ -261,7 +333,7 @@ export default function OnboardingScreen() {
               </Text>
             </Field>
 
-            <Field
+            {/* <Field
               label="Ganti kata sandi (opsional)"
               error={errors['password']}
               styles={styles}
@@ -274,7 +346,7 @@ export default function OnboardingScreen() {
               <Text style={styles.hint}>
                 Kosongkan kalau sandi yang kamu buat saat daftar sudah pas.
               </Text>
-            </Field>
+            </Field> */}
           </Card>
           ) : null}
 
@@ -303,7 +375,7 @@ export default function OnboardingScreen() {
               </View>
             </View>
             {preview ? (
-              <Text style={styles.hint}>
+              <Text style={[styles.hint, { color: theme.move}]}>
                 BMI-mu {preview.bmiValue} ·{' '}
                 {BMI_LABEL[bmiCategory(preview.bmiValue)]} (ambang WHO Asia-Pasifik)
               </Text>
@@ -464,15 +536,15 @@ const makeStyles = (theme: Theme) =>
     },
     stepBar: { height: 5, borderRadius: 3, backgroundColor: theme.border },
     stepBarOn: { backgroundColor: theme.brand },
-    stepLabel: { color: theme.textDim, fontSize: 11, marginTop: 6 },
+    stepLabel: { color: theme.textDim, fontSize: 12, marginTop: 6 },
     stepLabelOn: { color: theme.textMuted },
     actions: { flexDirection: 'row', gap: spacing.sm },
-    brand: { color: theme.brand, fontSize: 14, fontWeight: '700', letterSpacing: 1 },
-    title: { color: theme.text, fontSize: 24, fontWeight: '700', marginTop: 4 },
-    subtitle: { color: theme.textDim, fontSize: 13, marginTop: 6, lineHeight: 19 },
-    label: { color: theme.textMuted, fontSize: 13, fontWeight: '600', marginBottom: 6 },
-    hint: { color: theme.textDim, fontSize: 11, marginTop: 6, lineHeight: 16 },
-    error: { color: theme.danger, fontSize: 12, marginTop: 4 },
+    brand: { color: theme.brand, fontSize: 15, fontWeight: '700', letterSpacing: 1 },
+    title: { color: theme.text, fontSize: 26, fontWeight: '700', marginTop: 4 },
+    subtitle: { color: theme.textDim, fontSize: 14, marginTop: 6, lineHeight: 19 },
+    label: { color: theme.textMuted, fontSize: 14, fontWeight: '600', marginBottom: 6 },
+    hint: { color: theme.textDim, fontSize: 12, marginTop: 6, lineHeight: 16 },
+    error: { color: theme.danger, fontSize: 13, marginTop: 4 },
     input: {
       backgroundColor: theme.surface,
       borderColor: theme.border,
@@ -481,7 +553,7 @@ const makeStyles = (theme: Theme) =>
       paddingHorizontal: spacing.md,
       paddingVertical: 12,
       color: theme.text,
-      fontSize: 15,
+      fontSize: 16,
     },
     row: { flexDirection: 'row', gap: spacing.sm },
     chip: {
@@ -493,9 +565,9 @@ const makeStyles = (theme: Theme) =>
       paddingVertical: 12,
     },
     chipActive: { borderColor: theme.brand, backgroundColor: theme.brandSoft },
-    chipText: { color: theme.textMuted, fontSize: 14, fontWeight: '600' },
+    chipText: { color: theme.textMuted, fontSize: 15, fontWeight: '600' },
     chipTextActive: { color: theme.brand },
-    cardTitle: { color: theme.text, fontSize: 15, fontWeight: '700' },
+    cardTitle: { color: theme.text, fontSize: 16, fontWeight: '700' },
     option: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -507,9 +579,9 @@ const makeStyles = (theme: Theme) =>
       paddingVertical: spacing.md,
     },
     optionActive: { borderColor: theme.brand, backgroundColor: theme.brandSoft },
-    optionLabel: { color: theme.text, fontSize: 14, fontWeight: '600' },
+    optionLabel: { color: theme.text, fontSize: 15, fontWeight: '600' },
     optionLabelActive: { color: theme.brand },
-    optionHint: { color: theme.textDim, fontSize: 11, marginTop: 2 },
+    optionHint: { color: theme.textDim, fontSize: 12, marginTop: 2 },
     goal: {
       flex: 1,
       alignItems: 'center',
@@ -520,11 +592,11 @@ const makeStyles = (theme: Theme) =>
     },
     goalText: {
       color: theme.textMuted,
-      fontSize: 12,
+      fontSize: 13,
       fontWeight: '600',
       textAlign: 'center',
     },
-    previewHint: { color: theme.textDim, fontSize: 12, marginTop: 4 },
+    previewHint: { color: theme.textDim, fontSize: 13, marginTop: 4 },
     previewGrid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
@@ -532,7 +604,7 @@ const makeStyles = (theme: Theme) =>
       marginTop: spacing.md,
     },
     previewCell: { width: '46%' },
-    previewLabel: { color: theme.textDim, fontSize: 11 },
-    previewValue: { color: theme.text, fontSize: 15, fontWeight: '700', marginTop: 2 },
-    footer: { color: theme.textDim, fontSize: 11, textAlign: 'center' },
+    previewLabel: { color: theme.textDim, fontSize: 12 },
+    previewValue: { color: theme.text, fontSize: 16, fontWeight: '700', marginTop: 2 },
+    footer: { color: theme.textDim, fontSize: 12, textAlign: 'center' },
   });

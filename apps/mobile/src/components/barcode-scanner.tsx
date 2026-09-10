@@ -183,7 +183,7 @@ const makeStyles = (theme: Theme) =>
     },
     hint: {
       color: 'rgba(255,255,255,0.85)',
-      fontSize: 12,
+      fontSize: 13,
       textAlign: 'center',
       paddingBottom: spacing.sm,
     },
@@ -198,20 +198,20 @@ const makeStyles = (theme: Theme) =>
     placeholderTitle: { color: theme.textMuted, fontWeight: '600' },
     placeholderBody: {
       color: theme.textDim,
-      fontSize: 13,
+      fontSize: 14,
       textAlign: 'center',
       marginTop: 4,
     },
     note: {
       color: theme.textMuted,
-      fontSize: 13,
+      fontSize: 14,
       backgroundColor: theme.surface,
       borderRadius: radius.md,
       padding: spacing.md,
     },
     reload: { paddingVertical: spacing.xs, alignItems: 'center' },
-    reloadText: { color: theme.textDim, fontSize: 12, textDecorationLine: 'underline' },
-    label: { color: theme.textMuted, fontSize: 13, fontWeight: '500' },
+    reloadText: { color: theme.textDim, fontSize: 13, textDecorationLine: 'underline' },
+    label: { color: theme.textMuted, fontSize: 14, fontWeight: '500' },
     input: {
       backgroundColor: theme.bg,
       borderColor: theme.border,
@@ -220,7 +220,7 @@ const makeStyles = (theme: Theme) =>
       paddingHorizontal: spacing.md,
       paddingVertical: 12,
       color: theme.text,
-      fontSize: 15,
+      fontSize: 16,
     },
     actions: { flexDirection: 'row', gap: spacing.sm },
   });

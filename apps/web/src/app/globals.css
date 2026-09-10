@@ -127,6 +127,31 @@ body {
   height: 100%;
 }
 
+/*
+ * One step larger, everywhere at once.
+ *
+ * Tailwind's type scale is in rem, so raising the root size moves every
+ * `text-*` class, every padding written in rem, and every gap — in proportion,
+ * keeping the rhythm the design was drawn with. Editing a few hundred utility
+ * classes by hand would have missed some and broken the ratios in the rest.
+ *
+ * 17px rather than a round 18: 16 → 17 is roughly the gap between two steps of
+ * the scale at body size, and 18 starts to push the bottom navigation and the
+ * two-column forms into wrapping on a 360px phone.
+ *
+ * Print is left at the browser default on purpose — a report at 17px reflows
+ * the PDF and pushes the trends table onto a second page.
+ */
+html {
+  font-size: 17px;
+}
+
+@media print {
+  html {
+    font-size: 16px;
+  }
+}
+
 body {
   background: var(--color-ink-950);
   color: var(--color-ink-100);
