@@ -259,3 +259,194 @@ export function fillDays(
       },
   );
 }
+
+// --- Pedometer ---------------------------------------------------------------
+
+/**
+ * Today's total step count, given a baseline and what this session has counted.
+ *
+ * The two platforms hand back very different things, and the difference is why
+ * the Android build showed no steps at all:
+ *
+ *   - iOS can answer "how many steps since midnight?" directly
+ *     (`getStepCountAsync`), so the baseline is that answer.
+ *   - Android cannot. `getStepCountAsync` throws NotSupportedException there —
+ *     it is an iOS-only API — and its hardware sensor (TYPE_STEP_COUNTER)
+ *     only reports a running total since the device booted. Expo turns that
+ *     into "steps since you subscribed", which is zero every time the app
+ *     opens. So on Android the baseline has to be whatever was already saved
+ *     for today, and this session's count is added on top.
+ *
+ * The critical property is that `sessionSteps` is *cumulative since the
+ * subscription started*, not a per-event delta. The old code added each event
+ * to a running total, which meant a walk reporting 1, 2, 3 steps was recorded
+ * as 1 + 3 + 6 = 10. Taking the latest value instead of summing is the whole
+ * fix.
+ *
+ * The baseline is captured once and then held, so repeated syncs during a
+ * session never count the same steps twice.
+ */
+export function totalStepsToday(baseline: number, sessionSteps: number): number {
+  const safeBaseline = Number.isFinite(baseline) && baseline > 0 ? baseline : 0;
+  const safeSession = Number.isFinite(sessionSteps) && sessionSteps > 0 ? sessionSteps : 0;
+  return Math.round(safeBaseline + safeSession);
+}
+
+export interface StepSyncState {
+  /** The value most recently written to the database. */
+  lastValue: number;
+  /** When that write happened, as an epoch millisecond timestamp. */
+  lastAt: number;
+}
+
+/**
+ * Should this step count be written to the database right now?
+ *
+ * The sensor fires several times a second while someone walks, and each write
+ * is a network round trip, so writes are rate-limited. Two rules beyond the
+ * obvious "has it changed":
+ *
+ *   - `force` bypasses the interval. It is what a screen calls when it is
+ *     going away — leaving the app, or the day rolling over. Without it the
+ *     last stretch of a walk is silently dropped, which is precisely the
+ *     "steps do not sync" symptom: the throttle discarded updates instead of
+ *     deferring them, so whatever happened in the final minute never landed.
+ *   - A count that has gone *down* is not written. That happens when the
+ *     phone reboots and the hardware counter resets; overwriting a real total
+ *     with a smaller one would lose the day's progress.
+ */
+export function shouldSyncSteps(
+  steps: number,
+  state: StepSyncState,
+  now: number,
+  { minIntervalMs = 60_000, force = false }: { minIntervalMs?: number; force?: boolean } = {},
+): boolean {
+  if (!Number.isFinite(steps) || steps <= 0) return false;
+  if (steps <= state.lastValue) return false;
+  if (force) return true;
+  // Nothing written yet this session: the first real count goes straight out.
+  // Stated as its own rule rather than left to `now - 0 >= interval`, which
+  // only happens to be true because the epoch is decades ago.
+  if (state.lastAt === 0) return true;
+  return now - state.lastAt >= minIntervalMs;
+}
+
+// --- Chart scales ------------------------------------------------------------
+
+export interface AxisBounds {
+  min: number;
+  max: number;
+  /** Values to draw a gridline and a label at, low to high. */
+  ticks: number[];
+}
+
+/**
+ * A y-axis that reads as deliberate rather than as whatever the data happened
+ * to be.
+ *
+ * Two rules do the work. Ticks land on round numbers — 1, 2, 2.5 or 5 times a
+ * power of ten — because "78,4 / 79,7 / 81,0" is a scale nobody can hold in
+ * their head, while "78 / 80 / 82" is read at a glance. And the range is
+ * padded slightly so the highest point is not welded to the top edge.
+ *
+ * `includeZero` is the honesty switch, and it matters more than it looks:
+ *
+ *   - Bars MUST start at zero. A bar's length is its value, so a truncated
+ *     baseline makes 2100 kcal look like twice 1900.
+ *   - Lines must NOT be forced to zero. Bodyweight lives between 78 and 81;
+ *     stretching that axis down to 0 flattens a real month of progress into a
+ *     horizontal line, which is the opposite of what someone tracking weight
+ *     needs to see.
+ */
+export function niceAxisBounds(
+  values: readonly number[],
+  { includeZero = false, targetTicks = 4 }: { includeZero?: boolean; targetTicks?: number } = {},
+): AxisBounds {
+  const finite = values.filter((v) => Number.isFinite(v));
+  if (finite.length === 0) return { min: 0, max: 1, ticks: [0, 1] };
+
+  let low = Math.min(...finite);
+  let high = Math.max(...finite);
+  if (includeZero) low = Math.min(0, low);
+
+  // A perfectly flat series has no range to divide by; give it one.
+  if (high === low) {
+    const pad = Math.abs(high) > 0 ? Math.abs(high) * 0.05 : 1;
+    high += pad;
+    low = includeZero ? Math.min(0, low) : low - pad;
+  }
+
+  const step = niceStep((high - low) / targetTicks);
+  const min = includeZero ? 0 : Math.floor(low / step) * step;
+  const max = Math.ceil(high / step) * step;
+
+  const ticks: number[] = [];
+  // Rounded each time: repeated addition of 2.5 drifts into 7.500000000000001,
+  // which then prints as a nonsense axis label.
+  for (let t = min; t <= max + step / 2; t += step) {
+    ticks.push(Math.round(t * 1000) / 1000);
+  }
+
+  return { min, max, ticks };
+}
+
+/** The nearest 1/2/2.5/5 x 10^n at or above `rough`. */
+function niceStep(rough: number): number {
+  if (!Number.isFinite(rough) || rough <= 0) return 1;
+  const magnitude = 10 ** Math.floor(Math.log10(rough));
+  const normalised = rough / magnitude;
+  const nice = normalised <= 1 ? 1 : normalised <= 2 ? 2 : normalised <= 2.5 ? 2.5 : normalised <= 5 ? 5 : 10;
+  return nice * magnitude;
+}
+
+export interface DayBucket<T> {
+  /** First day in the bucket — what the x-axis is labelled with. */
+  from: DateKey;
+  /** Last day in the bucket. Equal to `from` when nothing was grouped. */
+  to: DateKey;
+  /** Mean of the non-null values, or null when the whole bucket is empty. */
+  value: number | null;
+  /** How many days in the bucket actually had a value. */
+  samples: number;
+  /** Whatever the caller wants to carry through. */
+  items: readonly T[];
+}
+
+/**
+ * Group a daily series into at most `maxBuckets` columns.
+ *
+ * A year of data is 365 bars. On a phone that is under a pixel each — not a
+ * chart, a texture. Averaging consecutive days into weeks keeps the shape of
+ * the year while leaving marks wide enough to see and to tap.
+ *
+ * Empty days average as absent rather than as zero, so a week with one
+ * missing day is not dragged down by it; a bucket with no data at all stays
+ * null, and the chart can draw a gap instead of inventing a floor.
+ */
+export function bucketDays<T extends { day: DateKey; value: number | null }>(
+  points: readonly T[],
+  maxBuckets: number,
+): DayBucket<T>[] {
+  if (maxBuckets < 1) throw new RangeError('maxBuckets must be >= 1');
+  if (points.length === 0) return [];
+
+  const size = Math.ceil(points.length / maxBuckets);
+  const buckets: DayBucket<T>[] = [];
+
+  for (let i = 0; i < points.length; i += size) {
+    const slice = points.slice(i, i + size);
+    const present = slice.filter((p) => p.value !== null).map((p) => p.value as number);
+    buckets.push({
+      from: slice[0]!.day,
+      to: slice[slice.length - 1]!.day,
+      value:
+        present.length === 0
+          ? null
+          : Math.round((present.reduce((a, b) => a + b, 0) / present.length) * 100) / 100,
+      samples: present.length,
+      items: slice,
+    });
+  }
+
+  return buckets;
+}

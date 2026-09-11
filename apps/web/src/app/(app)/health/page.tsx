@@ -11,6 +11,7 @@ import {
 } from '@calorya/core';
 import { useState } from 'react';
 import { DayNav } from '@/components/nav';
+import { WaterQuickAdd } from '@/components/water-quick-add';
 import {
   Button,
   Card,
@@ -19,10 +20,11 @@ import {
   inputClass,
   ProgressBar,
   SectionTitle,
+  Skeleton,
+  Spinner,
 } from '@/components/ui';
 import {
   useAddMood,
-  useAddWater,
   useDeleteWater,
   useProfile,
   useSaveSleep,
@@ -35,7 +37,6 @@ import {
 } from '@/lib/hooks';
 import { useDay } from '@/lib/use-day';
 
-const QUICK_WATER = [150, 250, 350, 500, 750] as const;
 const MOODS = [
   { score: 1, emoji: '😞', label: 'Buruk' },
   { score: 2, emoji: '🙁', label: 'Kurang' },
@@ -45,9 +46,32 @@ const MOODS = [
 ] as const;
 
 export default function HealthPage() {
-  const { data: profile } = useProfile();
+  const { data: profile, isLoading: profileLoading } = useProfile();
   const day = useDay(profile?.timezone);
-  const { data: targets } = useTargets(day.selected);
+  const { data: targets, isLoading: targetsLoading } = useTargets(day.selected);
+
+  /*
+   * Every card below takes its denominator from `targets`, and each one falls
+   * back to a hard-coded default — 2000 ml, 480 minutes, 8000 steps. Rendering
+   * before the query answers therefore shows five progress bars measured
+   * against numbers the user never chose, which then jump when the real
+   * targets land. Waiting is both more honest and less jarring.
+   */
+  if (profileLoading || targetsLoading) {
+    return (
+      <div className="space-y-5">
+        <header className="space-y-3">
+          <Skeleton className="h-7 w-48" />
+          <Skeleton className="h-10" />
+        </header>
+        <Skeleton className="h-44" />
+        <Skeleton className="h-72" />
+        <Skeleton className="h-40" />
+        <Skeleton className="h-32" />
+        <Skeleton className="h-28" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">
@@ -74,7 +98,6 @@ export default function HealthPage() {
 
 function WaterCard({ day, target }: { day: string; target: number }) {
   const { data: entries } = useWaterEntries(day);
-  const addWater = useAddWater(day);
   const removeWater = useDeleteWater(day);
 
   const total = (entries ?? []).reduce((sum, entry) => sum + entry.amountMl, 0);
@@ -98,18 +121,8 @@ function WaterCard({ day, target }: { day: string; target: number }) {
         label="Progres minum air"
       />
 
-      <div className="mt-3 grid grid-cols-5 gap-2">
-        {QUICK_WATER.map((ml) => (
-          <button
-            key={ml}
-            type="button"
-            disabled={addWater.isPending}
-            onClick={() => addWater.mutate({ loggedOn: day, amountMl: ml })}
-            className="rounded-xl border border-water/40 bg-water/10 py-2 text-xs font-medium text-water disabled:opacity-50"
-          >
-            +{ml}
-          </button>
-        ))}
+      <div className="mt-3">
+        <WaterQuickAdd day={day} />
       </div>
 
       {entries && entries.length > 0 && (
@@ -119,18 +132,27 @@ function WaterCard({ day, target }: { day: string; target: number }) {
               <button
                 type="button"
                 onClick={() => removeWater.mutate(entry.id)}
+                disabled={removeWater.isPending}
+                aria-busy={
+                  (removeWater.isPending && removeWater.variables === entry.id) ||
+                  undefined
+                }
                 aria-label={`Hapus catatan ${entry.amountMl} ml`}
-                className="rounded-full bg-ink-800 px-2.5 py-1 text-xs text-ink-300 hover:bg-red-500/20 hover:text-red-300"
+                className="inline-flex items-center gap-1.5 rounded-full bg-ink-800 px-2.5 py-1 text-xs text-ink-300 hover:bg-red-500/20 hover:text-red-300 disabled:opacity-50"
               >
-                {entry.amountMl} ml ×
+                {entry.amountMl} ml
+                {removeWater.isPending && removeWater.variables === entry.id ? (
+                  <Spinner className="h-3 w-3" />
+                ) : (
+                  '×'
+                )}
               </button>
             </li>
           ))}
         </ul>
       )}
 
-      {addWater.error != null && <ErrorNote error={addWater.error} />}
-    </Card>
+        </Card>
   );
 }
 
@@ -230,7 +252,7 @@ function SleepCard({ day, targetMin }: { day: string; targetMin: number }) {
           </div>
         </Field>
 
-        <Button type="submit" variant="ghost" disabled={save.isPending} className="w-full">
+        <Button type="submit" variant="ghost" busy={save.isPending} className="w-full">
           {save.isPending ? 'Menyimpan…' : sleep ? 'Perbarui tidur' : 'Simpan tidur'}
         </Button>
         {save.error != null && <ErrorNote error={save.error} />}
@@ -285,8 +307,8 @@ function StepsCard({ day, target }: { day: string; target: number }) {
           className={inputClass}
           aria-label="Jumlah langkah"
         />
-        <Button type="submit" variant="ghost" disabled={save.isPending}>
-          Simpan
+        <Button type="submit" variant="ghost" busy={save.isPending}>
+          {save.isPending ? 'Menyimpan…' : 'Simpan'}
         </Button>
       </form>
       <p className="mt-2 text-xs text-ink-500">
@@ -328,8 +350,8 @@ function WeightCard({ day, heightCm }: { day: string; heightCm: number | null })
           className={inputClass}
           aria-label="Berat badan dalam kilogram"
         />
-        <Button type="submit" variant="ghost" disabled={save.isPending}>
-          Simpan
+        <Button type="submit" variant="ghost" busy={save.isPending}>
+          {save.isPending ? 'Menyimpan…' : 'Simpan'}
         </Button>
       </form>
 
@@ -356,6 +378,9 @@ function MoodCard({ day }: { day: string }) {
             key={mood.score}
             type="button"
             disabled={addMood.isPending}
+            aria-busy={
+              (addMood.isPending && addMood.variables?.score === mood.score) || undefined
+            }
             onClick={() =>
               addMood.mutate(
                 { loggedOn: day, score: mood.score },
@@ -370,7 +395,11 @@ function MoodCard({ day }: { day: string }) {
                 : 'border-ink-700 hover:bg-ink-800'
             }`}
           >
-            <span aria-hidden="true">{mood.emoji}</span>
+            {addMood.isPending && addMood.variables?.score === mood.score ? (
+              <Spinner className="mx-auto h-5 w-5" />
+            ) : (
+              <span aria-hidden="true">{mood.emoji}</span>
+            )}
           </button>
         ))}
       </div>

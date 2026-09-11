@@ -40,38 +40,6 @@ export function DateField({
   const styles = useThemedStyles(makeStyles);
   const [open, setOpen] = useState(false);
 
-  const thisYear = new Date().getFullYear();
-  const first = minYear ?? thisYear - 100;
-  const last = maxYear ?? thisYear;
-
-  const parsed = parseKey(value) ?? { y: thisYear - 25, m: 1, d: 1 };
-  const [draft, setDraft] = useState(parsed);
-
-  // Reopening after a cancel must show the saved value again, not the
-  // half-scrolled state the last visit was abandoned in.
-  useEffect(() => {
-    if (open) setDraft(parseKey(value) ?? parsed);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, value]);
-
-  const years = useMemo(
-    () => Array.from({ length: last - first + 1 }, (_, i) => last - i),
-    [first, last],
-  );
-  const months = useMemo(() => MONTH_NAMES_FULL.map((name, i) => ({ name, n: i + 1 })), []);
-
-  /*
-   * The day column shrinks with the month. Without this, picking 31 January
-   * and then February silently produces the 31st of a month that has 28 days
-   * — which Postgres rejects at the very end, long after the mistake.
-   */
-  const maxDay = daysInMonth(draft.y, draft.m);
-  const days = useMemo(
-    () => Array.from({ length: maxDay }, (_, i) => i + 1),
-    [maxDay],
-  );
-  const safeDay = Math.min(draft.d, maxDay);
-
   return (
     <View>
       {label ? <Text style={styles.label}>{label}</Text> : null}
@@ -88,67 +56,156 @@ export function DateField({
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <Modal
+      <DatePickerModal
         visible={open}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setOpen(false)}
-      >
-        <View style={styles.backdrop}>
-          <View style={styles.sheet}>
-            <Text style={styles.sheetTitle}>{label ?? 'Pilih tanggal'}</Text>
-            <Text style={styles.preview}>
-              {formatFullDate(toKey(draft.y, draft.m, safeDay))}
-            </Text>
+        value={value}
+        title={label ?? 'Pilih tanggal'}
+        minYear={minYear}
+        maxYear={maxYear}
+        onCancel={() => setOpen(false)}
+        onPick={(next) => {
+          onChange(next);
+          setOpen(false);
+        }}
+      />
+    </View>
+  );
+}
 
-            <View style={styles.columns}>
-              <Column
-                data={days}
-                selected={safeDay}
-                render={(n) => String(n)}
-                onSelect={(d) => setDraft((s) => ({ ...s, d }))}
-                styles={styles}
-                a11y="Tanggal"
-              />
-              <Column
-                data={months.map((m) => m.n)}
-                selected={draft.m}
-                render={(n) => MONTH_NAMES_FULL[n - 1] ?? String(n)}
-                onSelect={(m) => setDraft((s) => ({ ...s, m }))}
-                styles={styles}
-                wide
-                a11y="Bulan"
-              />
-              <Column
-                data={years}
-                selected={draft.y}
-                render={(n) => String(n)}
-                onSelect={(y) => setDraft((s) => ({ ...s, y }))}
-                styles={styles}
-                a11y="Tahun"
-              />
-            </View>
+/**
+ * The picker itself, separated from the field that opens it.
+ *
+ * The day navigator on the Catat screen needs the same three columns behind a
+ * completely different trigger — a "‹ Kemarin ›" bar rather than a form field.
+ * Without this split the app would have grown a second date picker, and two
+ * pickers drift: one gets the leap-year fix, the other does not.
+ */
+export function DatePickerModal({
+  visible,
+  value,
+  title = 'Pilih tanggal',
+  minYear,
+  maxYear,
+  maxDate,
+  onPick,
+  onCancel,
+}: {
+  visible: boolean;
+  /** ISO date key the picker opens on. */
+  value: string;
+  title?: string;
+  minYear?: number;
+  maxYear?: number;
+  /**
+   * The latest selectable day, as a date key.
+   *
+   * The columns are narrowed to it rather than the choice being clamped after
+   * the fact. Silently turning "13 September" into "11 September" because the
+   * caller knew something the picker did not is the kind of quiet correction
+   * that makes people distrust a form — better that the days simply are not
+   * offered.
+   */
+  maxDate?: string;
+  onPick: (next: string) => void;
+  onCancel: () => void;
+}) {
+  const styles = useThemedStyles(makeStyles);
 
-            <View style={styles.actions}>
-              <Button
-                label="Batal"
-                variant="ghost"
-                onPress={() => setOpen(false)}
-                style={{ flex: 1 }}
-              />
-              <Button
-                label="Pilih"
-                onPress={() => {
-                  onChange(toKey(draft.y, draft.m, safeDay));
-                  setOpen(false);
-                }}
-                style={{ flex: 1 }}
-              />
-            </View>
+  const thisYear = new Date().getFullYear();
+  const first = minYear ?? thisYear - 100;
+  const last = maxYear ?? thisYear;
+
+  const parsed = parseKey(value) ?? { y: thisYear - 25, m: 1, d: 1 };
+  const [draft, setDraft] = useState(parsed);
+
+  // Reopening after a cancel must show the saved value again, not the
+  // half-scrolled state the last visit was abandoned in.
+  useEffect(() => {
+    if (visible) setDraft(parseKey(value) ?? parsed);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, value]);
+
+  const ceiling = maxDate ? parseKey(maxDate) : null;
+
+  const years = useMemo(
+    () => Array.from({ length: last - first + 1 }, (_, i) => last - i),
+    [first, last],
+  );
+
+  // Months stop at the ceiling's month once the ceiling's year is selected.
+  const months = useMemo(() => {
+    const upTo = ceiling && draft.y === ceiling.y ? ceiling.m : 12;
+    return Array.from({ length: upTo }, (_, i) => i + 1);
+  }, [ceiling, draft.y]);
+  const safeMonth = Math.min(draft.m, months.length);
+
+  /*
+   * The day column shrinks with the month. Without this, picking 31 January
+   * and then February silently produces the 31st of a month that has 28 days
+   * — which Postgres rejects at the very end, long after the mistake.
+   *
+   * It shrinks again at the ceiling: on the current month there is no such
+   * thing as tomorrow.
+   */
+  const monthLength = daysInMonth(draft.y, safeMonth);
+  const maxDay =
+    ceiling && draft.y === ceiling.y && safeMonth === ceiling.m
+      ? Math.min(monthLength, ceiling.d)
+      : monthLength;
+  const days = useMemo(
+    () => Array.from({ length: maxDay }, (_, i) => i + 1),
+    [maxDay],
+  );
+  const safeDay = Math.min(draft.d, maxDay);
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
+      <View style={styles.backdrop}>
+        <View style={styles.sheet}>
+          <Text style={styles.sheetTitle}>{title}</Text>
+          <Text style={styles.preview}>
+            {formatFullDate(toKey(draft.y, safeMonth, safeDay))}
+          </Text>
+
+          <View style={styles.columns}>
+            <Column
+              data={days}
+              selected={safeDay}
+              render={(n) => String(n)}
+              onSelect={(d) => setDraft((s) => ({ ...s, d }))}
+              styles={styles}
+              a11y="Tanggal"
+            />
+            <Column
+              data={months}
+              selected={safeMonth}
+              render={(n) => MONTH_NAMES_FULL[n - 1] ?? String(n)}
+              onSelect={(m) => setDraft((s) => ({ ...s, m }))}
+              styles={styles}
+              wide
+              a11y="Bulan"
+            />
+            <Column
+              data={years}
+              selected={draft.y}
+              render={(n) => String(n)}
+              onSelect={(y) => setDraft((s) => ({ ...s, y }))}
+              styles={styles}
+              a11y="Tahun"
+            />
+          </View>
+
+          <View style={styles.actions}>
+            <Button label="Batal" variant="ghost" onPress={onCancel} style={{ flex: 1 }} />
+            <Button
+              label="Pilih"
+              onPress={() => onPick(toKey(draft.y, safeMonth, safeDay))}
+              style={{ flex: 1 }}
+            />
           </View>
         </View>
-      </Modal>
-    </View>
+      </View>
+    </Modal>
   );
 }
 

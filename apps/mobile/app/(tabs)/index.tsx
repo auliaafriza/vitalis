@@ -1,5 +1,4 @@
 import {
-  addDays,
   currentStreak,
   formatDuration,
   formatKcal,
@@ -24,9 +23,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
-  CalendarIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
   PlusIcon,
 } from "../../src/components/icons";
 import {
@@ -35,10 +31,13 @@ import {
   ErrorNote,
   MacroBar,
   Ring,
+  Skeleton,
+  SkeletonCard,
   StatTile,
 } from "../../src/components/ui";
+import { DayNav } from "../../src/components/day-nav";
+import { WaterQuickAdd } from "../../src/components/water-quick-add";
 import {
-  useAddWater,
   useDaySummaries,
   useDaySummary,
   useFoodEntries,
@@ -54,7 +53,6 @@ import {
 } from "../../src/lib/theme";
 import { usePedometer } from "../../src/lib/use-pedometer";
 
-const QUICK_WATER = [200, 350, 500] as const;
 const MEAL_ORDER: readonly MealType[] = [
   "breakfast",
   "lunch",
@@ -91,15 +89,31 @@ export default function DashboardScreen() {
   // The header steps through days. Forward is capped at today: there is
   // nothing to show for tomorrow, and an empty ring reads as a bug.
   const [day, setDay] = useState(today);
-  const canGoForward = day < today;
 
-  const { data: targets } = useTargets(day);
-  const { data: summary, error, refetch, isRefetching } = useDaySummary(day);
+  const { data: targets, isLoading: targetsLoading } = useTargets(day);
+  const {
+    data: summary,
+    error,
+    refetch,
+    isRefetching,
+    isLoading: summaryLoading,
+  } = useDaySummary(day);
   const { data: entries } = useFoodEntries(day);
+
+  /*
+   * The first load for this day, as opposed to a background refresh.
+   *
+   * react-query's `isLoading` is only true when there is no data yet, which is
+   * exactly the case where showing the layout would be lying: `EMPTY_DAY`
+   * below fills every number with 0 and the calorie target with a made-up
+   * 2000, so an un-answered query renders a confident dashboard saying you
+   * have eaten nothing and your goal is a number nobody chose. A refetch keeps
+   * the real numbers on screen and shows the pull-to-refresh spinner instead.
+   */
+  const firstLoad = targetsLoading || summaryLoading;
 
   const days = useMemo(() => lastNDays(30, today), [today]);
   const { data: recent } = useDaySummaries(days[0] ?? today, today);
-  const addWater = useAddWater(day);
 
   // The one thing the web version cannot do: read the device pedometer.
   const pedometer = usePedometer(timezone);
@@ -140,6 +154,54 @@ export default function DashboardScreen() {
     );
   }
 
+  if (firstLoad) {
+    return (
+      <SafeAreaView edges={["top"]} style={styles.screen}>
+        <ScrollView contentContainerStyle={styles.content}>
+          <View style={styles.header}>
+            <View style={{ flex: 1, gap: spacing.sm }}>
+              <Skeleton height={13} width="35%" />
+              <Skeleton height={22} width="55%" />
+            </View>
+          </View>
+
+          {/* The ring card, in outline: day nav, the ring itself, macros. */}
+          <Card>
+            <Skeleton height={18} width="50%" style={{ alignSelf: "center" }} />
+            <View style={styles.ringWrap}>
+              <Skeleton height={182} width={182} radius={91} />
+            </View>
+            <Skeleton
+              height={14}
+              width="60%"
+              style={{ alignSelf: "center", marginBottom: spacing.lg }}
+            />
+            {/*
+              `styles.macros` is a row, and the three real MacroBars each take
+              a third of it. Each skeleton needs its own flex box for that —
+              a bare width:"100%" child in a row overflows the card instead of
+              sharing it.
+            */}
+            <View style={styles.macros}>
+              <View style={{ flex: 1 }}>
+                <Skeleton height={12} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Skeleton height={12} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Skeleton height={12} />
+              </View>
+            </View>
+          </Card>
+
+          <SkeletonCard lines={2} />
+          <SkeletonCard lines={3} />
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView edges={["top"]} style={styles.screen}>
       <ScrollView
@@ -168,35 +230,7 @@ export default function DashboardScreen() {
         </View>
 
         <Card>
-          <View style={styles.dayNav}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Hari sebelumnya"
-              onPress={() => setDay(addDays(day, -1))}
-              hitSlop={10}
-            >
-              <ChevronLeftIcon color={theme.textDim} size={20} />
-            </Pressable>
-            <View style={styles.dayNavLabel}>
-              <CalendarIcon color={theme.textDim} size={15} weight={1.8} />
-              <Text style={styles.dayNavText}>
-                {relativeDayLabel(day, today)}
-              </Text>
-            </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Hari berikutnya"
-              accessibilityState={{ disabled: !canGoForward }}
-              disabled={!canGoForward}
-              onPress={() => setDay(addDays(day, 1))}
-              hitSlop={10}
-            >
-              <ChevronRightIcon
-                color={canGoForward ? theme.textDim : theme.border}
-                size={20}
-              />
-            </Pressable>
-          </View>
+          <DayNav selected={day} today={today} onChange={setDay} />
 
           <View style={styles.ringWrap}>
             <Ring
@@ -242,7 +276,7 @@ export default function DashboardScreen() {
 
           <Button
             label="Catat Makanan"
-            onPress={() => router.push("/nutrition?add=1")}
+            onPress={() => router.push(`/nutrition?add=1&day=${day}`)}
             icon={<PlusIcon color={theme.onBrand} size={18} weight={2.4} />}
             style={{ marginTop: spacing.lg }}
           />
@@ -299,10 +333,23 @@ export default function DashboardScreen() {
             onPress={() => router.push("/health")}
             label="Langkah"
             value={steps === null ? "—" : steps.toLocaleString("id-ID")}
+            /*
+             * The old hint had no branch for "working". It read: sensor
+             * missing → "Sensor tidak tersedia", otherwise → "Error dari
+             * sensor perangkat" — so a perfectly healthy pedometer was
+             * labelled an error, permanently, on every device that had one.
+             * That is the word people were seeing.
+             */
             hint={
               pedometer.available === false
                 ? "Sensor tidak tersedia"
-                : "Error dari sensor perangkat"
+                : pedometer.error
+                  ? pedometer.error
+                  : day !== today
+                    ? "Tercatat hari itu"
+                    : pedometer.limited
+                      ? "Dihitung selama aplikasi dibuka"
+                      : "Dari sensor perangkat"
             }
             accent={theme.move}
           />
@@ -317,18 +364,7 @@ export default function DashboardScreen() {
 
         <Card>
           <Text style={styles.cardTitle}>Air Minum</Text>
-          <View style={styles.quickRow}>
-            {QUICK_WATER.map((ml) => (
-              <Button
-                key={ml}
-                label={`+${ml} ml`}
-                variant="ghost"
-                disabled={addWater.isPending}
-                onPress={() => addWater.mutate({ loggedOn: day, amountMl: ml })}
-                style={{ flex: 1 }}
-              />
-            ))}
-          </View>
+          <WaterQuickAdd day={day} />
         </Card>
       </ScrollView>
     </SafeAreaView>
@@ -360,13 +396,6 @@ const makeStyles = (theme: Theme) =>
       borderRadius: radius.pill,
     },
     streakText: { color: theme.brand, fontWeight: "700", fontSize: 13 },
-    dayNav: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-    },
-    dayNavLabel: { flexDirection: "row", alignItems: "center", gap: 6 },
-    dayNavText: { color: theme.textMuted, fontSize: 14, fontWeight: "600" },
     ringWrap: { alignItems: "center", marginVertical: spacing.lg },
     ringValue: { color: theme.text, fontSize: 36, fontWeight: "700" },
     ringTarget: { color: theme.textDim, fontSize: 13, marginTop: 2 },
@@ -401,5 +430,4 @@ const makeStyles = (theme: Theme) =>
     mealKcal: { color: theme.textMuted, fontSize: 14, fontWeight: "600" },
     mealEmpty: { color: theme.textDim, fontSize: 14 },
     tiles: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md },
-    quickRow: { flexDirection: "row", gap: spacing.sm },
   });

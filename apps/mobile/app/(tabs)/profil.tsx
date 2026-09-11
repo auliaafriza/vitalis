@@ -1,4 +1,5 @@
 import {
+  recomputeTargets,
   saveTargets,
   setTutorialSeen,
   signOutEverywhere,
@@ -9,6 +10,7 @@ import {
   ACTIVITY_LABEL,
   ACTIVITY_LEVELS,
   GOAL_LABEL,
+  onboardingSchema,
   targetsSchema,
   todayKey,
   type ActivityLevel,
@@ -19,6 +21,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Linking,
   Pressable,
   ScrollView,
@@ -42,6 +45,7 @@ import {
   ConfirmModal,
   ErrorNote,
   PasswordInput,
+  SkeletonCard,
 } from '../../src/components/ui';
 import { qk, useProfile, useTargets } from '../../src/lib/hooks';
 import { privacyUrl } from '../../src/lib/site';
@@ -90,11 +94,11 @@ export default function ProfilScreen() {
   const queryClient = useQueryClient();
   const { session, refreshGate } = useSession();
 
-  const { data: profile } = useProfile();
+  const { data: profile, isLoading: profileLoading } = useProfile();
   const timezone =
     profile?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'Asia/Jakarta';
   const day = todayKey(timezone);
-  const { data: targets } = useTargets(day);
+  const { data: targets, isLoading: targetsLoading } = useTargets(day);
 
   const [form, setForm] = useState<TargetForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
@@ -115,13 +119,40 @@ export default function ProfilScreen() {
     });
   }, [targets]);
 
-  async function patchProfile(patch: { activityLevel?: ActivityLevel; goal?: Goal }) {
+  /**
+   * A change to any of these is a change to the plan.
+   *
+   * `day` is what turns that from a label change into a recalculation: passing
+   * it lets updateProfile derive a fresh set of targets from the new goal,
+   * height or activity level. Without it, tapping "Naikkan massa otot" used to
+   * highlight a button and leave every number on the dashboard untouched.
+   */
+  /**
+   * Which option is currently being written, so the chip the user tapped can
+   * say so.
+   *
+   * Choosing a goal now triggers a profile update *and* a full target
+   * recalculation — two round trips. Before this, the chip did not even change
+   * colour until both came back, which on a phone connection is several
+   * seconds of a screen that looks like it ignored the tap.
+   */
+  const [pendingChoice, setPendingChoice] = useState<string | null>(null);
+
+  async function patchProfile(patch: {
+    activityLevel?: ActivityLevel;
+    goal?: Goal;
+    heightCm?: number;
+  }) {
     setError(null);
+    setPendingChoice(patch.goal ?? patch.activityLevel ?? 'height');
     try {
-      await updateProfile(supabase, patch);
+      await updateProfile(supabase, patch, day);
       await queryClient.invalidateQueries({ queryKey: qk.profile });
+      await queryClient.invalidateQueries({ queryKey: ['targets'] });
     } catch (err) {
       setError(err);
+    } finally {
+      setPendingChoice(null);
     }
   }
 
@@ -136,8 +167,9 @@ export default function ProfilScreen() {
     setSaving(true);
     try {
       // A new target version starts today; past days keep the goals they were
-      // actually scored against.
-      await saveTargets(supabase, parsed.data, day);
+      // actually scored against. 'manual' marks these as the user's own
+      // numbers, so the recalculation that follows a weigh-in leaves them be.
+      await saveTargets(supabase, parsed.data, day, 'manual');
       await queryClient.invalidateQueries({ queryKey: ['targets'] });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -145,6 +177,71 @@ export default function ProfilScreen() {
       setError(err);
     } finally {
       setSaving(false);
+    }
+  }
+
+  /**
+   * The way back from a manual target.
+   *
+   * Once someone types their own numbers the app stops touching them, which is
+   * right — but it would be a trap without a door. This is the door.
+   */
+  const [recomputing, setRecomputing] = useState(false);
+
+  async function handleRecompute() {
+    setError(null);
+    setRecomputing(true);
+    try {
+      const next = await recomputeTargets(supabase, day, { force: true });
+      if (!next) {
+        setError(
+          new Error(
+            'Belum bisa dihitung: lengkapi tanggal lahir, jenis kelamin dan tinggi, lalu catat berat badanmu minimal sekali.',
+          ),
+        );
+        return;
+      }
+      await queryClient.invalidateQueries({ queryKey: ['targets'] });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      setError(err);
+    } finally {
+      setRecomputing(false);
+    }
+  }
+
+  /**
+   * Height, editable after setup.
+   *
+   * It was write-once before, which meant a typo during onboarding quietly
+   * skewed the BMR — and therefore every calorie target — for good.
+   */
+  const [heightDraft, setHeightDraft] = useState('');
+  const [heightBusy, setHeightBusy] = useState(false);
+  const [heightSaved, setHeightSaved] = useState(false);
+  const [heightError, setHeightError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (profile?.heightCm != null) setHeightDraft(String(profile.heightCm));
+  }, [profile?.heightCm]);
+
+  async function saveHeight() {
+    setHeightError(null);
+    const parsed = onboardingSchema.shape.heightCm.safeParse(heightDraft);
+    if (!parsed.success) {
+      setHeightError(parsed.error.issues[0]?.message ?? 'Tinggi tidak valid');
+      return;
+    }
+    if (parsed.data === profile?.heightCm) return;
+
+    setHeightBusy(true);
+    try {
+      await patchProfile({ heightCm: parsed.data });
+      setHeightSaved(true);
+      setTimeout(() => setHeightSaved(false), 2000);
+    } finally {
+      setHeightBusy(false);
     }
   }
 
@@ -249,6 +346,29 @@ export default function ProfilScreen() {
   const name = profile?.fullName?.trim() || 'Tanpa nama';
   const initial = name.charAt(0).toUpperCase();
 
+  /*
+   * The profile has not arrived yet.
+   *
+   * Rendering ahead of it shows an avatar reading "T" for "Tanpa nama", an
+   * empty height field, no goal selected and eight blank target boxes — a
+   * screen that looks like an account with nothing in it. Worse, the target
+   * form is editable in that state, so a fast tap could save eight empty
+   * fields over real targets.
+   */
+  if (profileLoading || targetsLoading) {
+    return (
+      <SafeAreaView edges={['top']} style={styles.screen}>
+        <ScrollView contentContainerStyle={styles.content}>
+          <Text style={styles.screenTitle}>Profil</Text>
+          <SkeletonCard lines={2} />
+          <SkeletonCard lines={2} />
+          <SkeletonCard lines={3} />
+          <SkeletonCard lines={4} />
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView edges={['top']} style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
@@ -331,6 +451,38 @@ export default function ProfilScreen() {
         </Card>
 
         <Card>
+          <View style={styles.cardHead}>
+            <Text style={styles.cardTitle}>Tinggi badan</Text>
+            {heightSaved ? <Text style={styles.savedTag}>Tersimpan</Text> : null}
+          </View>
+          <Text style={styles.cardHint}>
+            Ikut menentukan kebutuhan kalori dasarmu, jadi mengubahnya langsung
+            menghitung ulang target hari ini.
+          </Text>
+          <View style={[styles.fieldInputWrap, { marginTop: spacing.md }]}>
+            <TextInput
+              value={heightDraft}
+              onChangeText={setHeightDraft}
+              keyboardType="numeric"
+              placeholder="170"
+              placeholderTextColor={theme.textDim}
+              style={styles.fieldInput}
+              accessibilityLabel="Tinggi badan dalam sentimeter"
+            />
+            <Text style={styles.fieldUnit}>cm</Text>
+          </View>
+          {heightError ? <Text style={styles.fieldError}>{heightError}</Text> : null}
+          <Button
+            label="Simpan tinggi"
+            variant="ghost"
+            loading={heightBusy}
+            disabled={heightDraft === String(profile?.heightCm ?? '')}
+            onPress={() => void saveHeight()}
+            style={{ marginTop: spacing.md }}
+          />
+        </Card>
+
+        <Card>
           <Text style={styles.cardTitle}>Tingkat aktivitas</Text>
           <Text style={styles.cardHint}>
             Dipakai menghitung kebutuhan kalori harianmu.
@@ -343,8 +495,13 @@ export default function ProfilScreen() {
                   key={level}
                   accessibilityRole="radio"
                   accessibilityState={{ selected: active }}
+                  disabled={pendingChoice !== null}
                   onPress={() => void patchProfile({ activityLevel: level })}
-                  style={[styles.option, active && styles.optionActive]}
+                  style={[
+                    styles.option,
+                    active && styles.optionActive,
+                    pendingChoice !== null && !active && styles.optionWaiting,
+                  ]}
                 >
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.optionLabel, active && styles.optionLabelActive]}>
@@ -352,7 +509,11 @@ export default function ProfilScreen() {
                     </Text>
                     <Text style={styles.optionHint}>{ACTIVITY_HINT[level]}</Text>
                   </View>
-                  {active ? <CheckIcon color={theme.brand} size={18} weight={2.4} /> : null}
+                  {pendingChoice === level ? (
+                    <ActivityIndicator size="small" color={theme.brand} />
+                  ) : active ? (
+                    <CheckIcon color={theme.brand} size={18} weight={2.4} />
+                  ) : null}
                 </Pressable>
               );
             })}
@@ -369,12 +530,21 @@ export default function ProfilScreen() {
                   key={goal}
                   accessibilityRole="radio"
                   accessibilityState={{ selected: active }}
+                  disabled={pendingChoice !== null}
                   onPress={() => void patchProfile({ goal })}
-                  style={[styles.goal, active && styles.optionActive]}
+                  style={[
+                    styles.goal,
+                    active && styles.optionActive,
+                    pendingChoice !== null && !active && styles.optionWaiting,
+                  ]}
                 >
-                  <Text style={[styles.goalText, active && styles.optionLabelActive]}>
-                    {GOAL_LABEL[goal]}
-                  </Text>
+                  {pendingChoice === goal ? (
+                    <ActivityIndicator size="small" color={theme.brand} />
+                  ) : (
+                    <Text style={[styles.goalText, active && styles.optionLabelActive]}>
+                      {GOAL_LABEL[goal]}
+                    </Text>
+                  )}
                 </Pressable>
               );
             })}
@@ -417,6 +587,22 @@ export default function ProfilScreen() {
             loading={saving}
             style={{ marginTop: spacing.lg }}
           />
+
+          <View style={styles.autoNote}>
+            <Text style={styles.cardHint}>
+              Kalau kamu belum pernah mengisi angka di atas, target ini menyesuaikan
+              sendiri setiap kali berat badan, tujuan, tinggi atau tingkat aktivitasmu
+              berubah. Begitu kamu menyimpan angkamu sendiri, aplikasi berhenti
+              mengubahnya — tombol di bawah mengembalikannya ke perhitungan otomatis.
+            </Text>
+            <Button
+              label="Hitung ulang otomatis"
+              variant="ghost"
+              loading={recomputing}
+              onPress={() => void handleRecompute()}
+              style={{ marginTop: spacing.md }}
+            />
+          </View>
         </Card>
 
         <Card>
@@ -605,6 +791,8 @@ const makeStyles = (theme: Theme) =>
     optionLabel: { color: theme.text, fontSize: 15, fontWeight: '600' },
     optionLabelActive: { color: theme.brand },
     optionHint: { color: theme.textDim, fontSize: 12, marginTop: 2 },
+    /** The options not being written, dimmed while one of them is. */
+    optionWaiting: { opacity: 0.5 },
     goalRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
     goal: {
       flex: 1,
@@ -641,6 +829,13 @@ const makeStyles = (theme: Theme) =>
       textAlign: 'right',
     },
     fieldUnit: { color: theme.textDim, fontSize: 12 },
+    /** Separates the automatic-recalculation note from the manual form above. */
+    autoNote: {
+      marginTop: spacing.lg,
+      paddingTop: spacing.lg,
+      borderTopWidth: 1,
+      borderTopColor: theme.border,
+    },
     themeRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
     themeOption: {
       flex: 1,

@@ -20,6 +20,8 @@ import {
   toWaterEntry,
   toWeightEntry,
 } from '../mappers';
+// One-way edge: profile.ts must never import from here, or Metro gets a cycle.
+import { recomputeTargets } from './profile';
 
 // --- Water ------------------------------------------------------------------
 
@@ -108,7 +110,26 @@ export async function getLatestWeight(
   return row ? toWeightEntry(row) : null;
 }
 
-/** One weigh-in per day; logging twice replaces rather than duplicates. */
+/**
+ * One weigh-in per day; logging twice replaces rather than duplicates.
+ *
+ * Saving a weight also refreshes the daily targets, because the whole point of
+ * weighing yourself while dieting is that the plan should follow the body.
+ * Three guards keep that from being intrusive:
+ *
+ *   - Only the newest weigh-in triggers it. Filling in a number you forgot to
+ *     log last Tuesday must not rewrite last Tuesday's targets; the history is
+ *     versioned precisely so old days keep the goals they were actually
+ *     scored against.
+ *   - The recomputation itself uses a trend weight and writes nothing when
+ *     the numbers do not move.
+ *   - Targets the user typed by hand are left alone.
+ *
+ * It is also deliberately non-fatal. A weigh-in that saved is a weigh-in that
+ * saved; if the target refresh fails — offline, or the `source` column not
+ * migrated yet — the number the user entered must still come back to them
+ * rather than surfacing as a failed save.
+ */
 export async function upsertWeight(
   client: CaloryaClient,
   input: WeightEntryInput,
@@ -131,6 +152,21 @@ export async function upsertWeight(
       .single(),
     'upsertWeight',
   );
+
+  const newer = unwrapMaybe(
+    await client
+      .from('weight_entries')
+      .select('logged_on')
+      .eq('user_id', userId)
+      .gt('logged_on', input.loggedOn)
+      .limit(1)
+      .maybeSingle(),
+    'upsertWeight/newer',
+  );
+  if (!newer) {
+    await recomputeTargets(client, input.loggedOn).catch(() => {});
+  }
+
   return toWeightEntry(row);
 }
 

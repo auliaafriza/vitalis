@@ -1,26 +1,34 @@
 import {
+  bucketDays,
   clampRange,
   fillDays,
   formatDuration,
-  formatShortDay,
   isRangeAllowed,
   lastNDays,
   linearTrend,
+  movingAverage,
   todayKey,
   TREND_RANGES,
 } from '@calorya/core';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Svg, { Circle, Line, Polyline } from 'react-native-svg';
 import { LockIcon } from '../../src/components/icons';
-import { Card, EmptyState, Segmented, StatTile } from '../../src/components/ui';
+import { BarChart, LineChart } from '../../src/components/charts';
+import {
+  Card,
+  EmptyState,
+  Segmented,
+  SkeletonCard,
+  StatTile,
+} from '../../src/components/ui';
 import {
   useAllDaySummaries,
   useDaySummaries,
   useProfile,
   useTargets,
   useTier,
+  useWeights,
 } from '../../src/lib/hooks';
 import {
   radius,
@@ -31,10 +39,20 @@ import {
 } from '../../src/lib/theme';
 
 const VIEWS = [
+  { value: 'berat', label: 'Berat & Kalori' },
   { value: 'kalori', label: 'Kalori' },
-  { value: 'berat', label: 'Berat Badan' },
   { value: 'nutrisi', label: 'Nutrisi' },
 ] as const;
+
+/**
+ * The most columns worth drawing on a phone.
+ *
+ * A year is 365 days. At 350px of plot that is under a pixel per bar — not a
+ * chart, a texture. Beyond this cap the days are averaged into wider buckets
+ * (see `bucketDays`), which keeps the shape of the range while leaving marks
+ * you can actually see.
+ */
+const MAX_COLUMNS = 26;
 
 type ViewKey = (typeof VIEWS)[number]['value'];
 
@@ -48,7 +66,7 @@ export default function TrendsScreen() {
   const today = todayKey(timezone);
 
   const { data: tier } = useTier();
-  const [view, setView] = useState<ViewKey>('kalori');
+  const [view, setView] = useState<ViewKey>('berat');
   const [requested, setRequested] = useState<number | null>(7);
   const [upsell, setUpsell] = useState<string | null>(null);
 
@@ -67,8 +85,26 @@ export default function TrendsScreen() {
   const windowed = useDaySummaries(days[0] ?? today, today);
   const everything = useAllDaySummaries(allHistory);
   const summaries = allHistory ? everything.data : windowed.data;
+  /*
+   * Which of the two queries is actually feeding the chart decides whose
+   * loading flag matters — asking the wrong one means the skeleton never
+   * appears in "semua riwayat" mode, or never goes away in windowed mode.
+   */
+  const summariesLoading = allHistory ? everything.isLoading : windowed.isLoading;
 
   const { data: targets } = useTargets(today);
+
+  /*
+   * Weigh-ins, queried directly rather than read off the day summaries.
+   *
+   * The summaries carry at most one weight per day and no way to tell "did not
+   * weigh in" from "weighed the same", which is why the old chart could not
+   * space its points by date. This is the query the web app has always used.
+   */
+  const { data: weights } = useWeights(
+    allHistory ? '1900-01-01' : (days[0] ?? today),
+    today,
+  );
 
   // With all history the axis is whatever exists, not a fixed-length window.
   const axis = useMemo(
@@ -84,10 +120,6 @@ export default function TrendsScreen() {
     const mean = (values: number[]) =>
       values.length === 0 ? 0 : values.reduce((a, b) => a + b, 0) / values.length;
 
-    const weightPoints = series
-      .filter((s) => s.weightKg !== null)
-      .map((s) => ({ day: s.loggedOn, value: s.weightKg as number }));
-
     return {
       kcal: Math.round(mean(withFood.map((s) => s.kcal))),
       protein: Math.round(mean(withFood.map((s) => s.proteinG))),
@@ -96,12 +128,87 @@ export default function TrendsScreen() {
       water: Math.round(mean(series.map((s) => s.waterMl))),
       sleep: Math.round(mean(withSleep.map((s) => s.sleepMin ?? 0))),
       loggedDays: withFood.length,
-      weightPoints,
-      weightTrend: linearTrend(weightPoints),
     };
   }, [series]);
 
-  const visible = series.slice(-14);
+  /*
+   * The columns the calorie chart actually draws.
+   *
+   * This used to be `series.slice(-14)` — a hard-coded fortnight — so choosing
+   * "90 hari" or "1 tahun" changed the averages above the chart and left the
+   * chart itself showing the same two weeks. The range selector looked like it
+   * worked and did not. Now the whole selected range is drawn, bucketed down
+   * to something a phone can render.
+   */
+  const calorieColumns = useMemo(
+    () =>
+      bucketDays(
+        series.map((s) => ({ day: s.loggedOn, value: s.kcal > 0 ? s.kcal : null })),
+        MAX_COLUMNS,
+      ),
+    [series],
+  );
+
+  /**
+   * Weight, as measured and as smoothed.
+   *
+   * Daily bodyweight swings a kilo or more on water and gut contents, so the
+   * raw points alone read as noise and panic. The 7-day average is the line to
+   * actually judge progress by; the raw points stay visible underneath so the
+   * smoothing is never hiding anything.
+   */
+  const weightChart = useMemo(() => {
+    const byDay = new Map((weights ?? []).map((w) => [w.loggedOn, w.weightKg]));
+    const raw = axis.map((day) => ({ day, value: byDay.get(day) ?? null }));
+
+    const measured = raw.filter((p) => p.value !== null);
+    const firstDay = measured[0]?.day ?? null;
+    const lastDay = measured[measured.length - 1]?.day ?? null;
+
+    const averaged = movingAverage(
+      raw.map((p) => p.value),
+      7,
+    );
+
+    /*
+     * The smoothed line stops where the measurements stop.
+     *
+     * A centred 7-day average produces a value for any day with a weigh-in
+     * within three days either side — including days *after* the last one. On
+     * a 7-day range that drew a confident pale line all the way to today from
+     * a scale that had not been stepped on since Tuesday. A chart may not
+     * extrapolate; outside the measured span it has nothing to say.
+     */
+    const smoothed = raw.map((p, i) => ({
+      day: p.day,
+      value:
+        firstDay !== null && lastDay !== null && p.day >= firstDay && p.day <= lastDay
+          ? (averaged[i] ?? null)
+          : null,
+    }));
+
+    return {
+      raw,
+      smoothed,
+      /*
+       * Smoothing only earns its place over a span long enough for a 7-day
+       * window to mean something. Over one week it is nearly a straight line
+       * through five points — not a trend, just a second thing to explain.
+       */
+      showSmoothed: measured.length >= 10 && axis.length >= 21,
+      points: measured.map((p) => ({ day: p.day, value: p.value as number })),
+    };
+  }, [weights, axis]);
+
+  const weightTrend = useMemo(
+    () => linearTrend(weightChart.points),
+    [weightChart.points],
+  );
+  const weightNow =
+    weightChart.points.length > 0
+      ? weightChart.points[weightChart.points.length - 1]!.value
+      : null;
+
 
   return (
     <SafeAreaView edges={['top']} style={styles.screen}>
@@ -166,7 +273,21 @@ export default function TrendsScreen() {
           </Card>
         ) : null}
 
-        {stats.loggedDays === 0 ? (
+        {summariesLoading ? (
+          /*
+           * Not the empty state.
+           *
+           * `stats.loggedDays` is computed from `summaries ?? []`, so before
+           * the query answers it is 0 — and the screen told everyone, on every
+           * visit, that they had never logged anything. For a returning user
+           * that is the most alarming sentence the app can show.
+           */
+          <>
+            <SkeletonCard lines={2} />
+            <SkeletonCard lines={5} />
+            <SkeletonCard lines={3} />
+          </>
+        ) : stats.loggedDays === 0 ? (
           <EmptyState
             title="Belum ada data untuk digrafikkan"
             description="Catat makanan dan kebiasaan harianmu beberapa hari, lalu tren akan muncul di sini."
@@ -179,12 +300,18 @@ export default function TrendsScreen() {
                 {stats.kcal.toLocaleString('id-ID')}
                 <Text style={styles.bigUnit}> kal</Text>
               </Text>
-              <CalorieBars
-                days={visible}
-                target={targets?.kcal}
-                theme={theme}
-                styles={styles}
+              <BarChart
+                buckets={calorieColumns}
+                color={theme.water}
+                target={targets?.kcal ?? null}
+                formatValue={(v) => v.toLocaleString('id-ID')}
               />
+              {calorieColumns.length < series.length ? (
+                <Text style={styles.axisText}>
+                  Tiap batang merata-ratakan{' '}
+                  {Math.ceil(series.length / calorieColumns.length)} hari.
+                </Text>
+              ) : null}
             </Card>
 
             <View style={styles.tiles}>
@@ -202,74 +329,107 @@ export default function TrendsScreen() {
             </View>
           </>
         ) : view === 'berat' ? (
-          <Card>
-            <Text style={styles.cardTitle}>Berat Badan</Text>
-            {stats.weightPoints.length === 0 ? (
-              <Text style={styles.upsellBody}>
-                Belum ada penimbangan pada rentang ini.
-              </Text>
-            ) : (
-              <>
-                <View style={styles.weightHead}>
-                  <Text style={styles.big}>
-                    {stats.weightPoints[stats.weightPoints.length - 1]!.value.toFixed(1)}
-                    <Text style={styles.bigUnit}> kg</Text>
-                  </Text>
-                  {stats.weightTrend ? (
-                    <View
+          /*
+           * Two panels, stacked, over the same dates — never one plot with a
+           * kilogram axis on the left and a calorie axis on the right. A
+           * dual-axis chart lets the arbitrary alignment of the two scales
+           * invent a correlation the data does not contain, which for someone
+           * judging whether their eating is working is the worst possible
+           * thing for a chart to do. Sharing the x-axis lets the reader line
+           * the two up themselves, and the comparison stays theirs.
+           */
+          <>
+            <Card>
+              <View style={styles.weightHead}>
+                <View>
+                  <Text style={styles.cardTitle}>Berat Badan</Text>
+                  {weightNow !== null ? (
+                    <Text style={styles.big}>
+                      {weightNow.toFixed(1)}
+                      <Text style={styles.bigUnit}> kg</Text>
+                    </Text>
+                  ) : null}
+                </View>
+                {weightTrend ? (
+                  <View
+                    style={[
+                      styles.deltaChip,
+                      {
+                        backgroundColor:
+                          weightTrend.direction === 'flat'
+                            ? theme.surfaceAlt
+                            : theme.brandSoft,
+                      },
+                    ]}
+                  >
+                    <Text
                       style={[
-                        styles.deltaChip,
+                        styles.deltaText,
                         {
-                          backgroundColor:
-                            stats.weightTrend.direction === 'down'
-                              ? theme.brandSoft
-                              : theme.surfaceAlt,
+                          color:
+                            weightTrend.direction === 'flat'
+                              ? theme.textMuted
+                              : theme.brand,
                         },
                       ]}
                     >
-                      <Text
-                        style={[
-                          styles.deltaText,
-                          {
-                            color:
-                              stats.weightTrend.direction === 'down'
-                                ? theme.brand
-                                : stats.weightTrend.direction === 'up'
-                                  ? theme.move
-                                  : theme.textMuted,
-                          },
-                        ]}
-                      >
-                        {stats.weightTrend.slopePerWeek > 0 ? '↑' : '↓'}{' '}
-                        {Math.abs(stats.weightTrend.slopePerWeek)} kg/minggu
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-                <WeightLine
-                  points={stats.weightPoints.map((p) => p.value)}
-                  color={theme.brand}
-                  styles={styles}
-                />
-                <View style={styles.axisRow}>
-                  <Text style={styles.axisText}>
-                    {formatShortDay(stats.weightPoints[0]!.day)}
-                  </Text>
-                  <Text style={styles.axisText}>
-                    {formatShortDay(
-                      stats.weightPoints[stats.weightPoints.length - 1]!.day,
-                    )}
-                  </Text>
-                </View>
-                {stats.weightTrend ? (
-                  <Text style={styles.axisText}>
-                    Berdasarkan {stats.weightTrend.sampleSize} penimbangan (regresi
-                    linier)
-                  </Text>
+                      {weightTrend.direction === 'flat'
+                        ? 'Stabil'
+                        : `${weightTrend.slopePerWeek > 0 ? '↑' : '↓'} ${Math.abs(
+                            weightTrend.slopePerWeek,
+                          ).toFixed(2)} kg/minggu`}
+                    </Text>
+                  </View>
                 ) : null}
-              </>
-            )}
-          </Card>
+              </View>
+
+              <LineChart
+                points={weightChart.raw}
+                overlay={weightChart.showSmoothed ? weightChart.smoothed : undefined}
+                overlayLabel={
+                  weightChart.showSmoothed ? 'Garis tebal = rata-rata 7 hari' : undefined
+                }
+                color={theme.brand}
+                formatValue={(v) => v.toFixed(1)}
+              />
+
+              {weightChart.points.length === 0 ? (
+                <Text style={styles.axisText}>
+                  Belum ada penimbangan pada rentang ini. Catat beratmu di layar
+                  Kesehatan, lalu grafiknya muncul di sini.
+                </Text>
+              ) : weightTrend ? (
+                <Text style={styles.axisText}>
+                  Dari {weightTrend.sampleSize} penimbangan (regresi linier).
+                </Text>
+              ) : (
+                <Text style={styles.axisText}>
+                  Butuh minimal dua penimbangan untuk menghitung arah tren.
+                </Text>
+              )}
+            </Card>
+
+            <Card>
+              <Text style={styles.cardTitle}>Kalori pada rentang yang sama</Text>
+              <Text style={styles.axisText}>
+                Rata-rata {stats.kcal.toLocaleString('id-ID')} kal/hari
+                {targets ? ` dari target ${targets.kcal.toLocaleString('id-ID')}` : ''}
+              </Text>
+              <BarChart
+                buckets={calorieColumns}
+                color={theme.water}
+                target={targets?.kcal ?? null}
+                formatValue={(v) => v.toLocaleString('id-ID')}
+              />
+              <Text style={styles.axisText}>
+                {calorieColumns.length < series.length
+                  ? `Garis putus-putus adalah targetmu. Tiap batang merata-ratakan ${Math.ceil(
+                      series.length / calorieColumns.length,
+                    )} hari.`
+                  : 'Garis putus-putus adalah targetmu.'}
+              </Text>
+            </Card>
+          </>
         ) : (
           <Card>
             <Text style={styles.cardTitle}>Rata-rata Nutrisi Harian</Text>
@@ -308,126 +468,6 @@ export default function TrendsScreen() {
         </Card>
       </ScrollView>
     </SafeAreaView>
-  );
-}
-
-/**
- * A bar chart drawn with plain Views.
- *
- * Pulling a charting library in for fourteen bars would add weight for no
- * information; the dashed target line is the only thing SVG is used for, and
- * only because a dashed rule cannot be drawn with a View.
- */
-function CalorieBars({
-  days,
-  target,
-  theme,
-  styles,
-}: {
-  days: { loggedOn: string; kcal: number }[];
-  target?: number;
-  theme: Theme;
-  styles: ReturnType<typeof makeStyles>;
-}) {
-  const max = Math.max(target ?? 0, ...days.map((d) => d.kcal), 1);
-
-  return (
-    <View style={{ marginTop: spacing.lg }}>
-      <View style={styles.chart}>
-        {target ? (
-          <View
-            style={[styles.targetLine, { bottom: `${(target / max) * 100}%` }]}
-            pointerEvents="none"
-          >
-            <Svg width="100%" height={1}>
-              <Line
-                x1="0"
-                y1="0.5"
-                x2="100%"
-                y2="0.5"
-                stroke={theme.textDim}
-                strokeWidth={1}
-                strokeDasharray="4 4"
-              />
-            </Svg>
-            <Text style={styles.targetLabel}>Target {target.toLocaleString('id-ID')}</Text>
-          </View>
-        ) : null}
-
-        {days.map((point) => (
-          <View key={point.loggedOn} style={styles.barColumn}>
-            <View
-              style={[
-                styles.bar,
-                {
-                  height: `${Math.max(2, (point.kcal / max) * 100)}%`,
-                  backgroundColor:
-                    target && point.kcal > target ? theme.body : theme.water,
-                },
-              ]}
-            />
-          </View>
-        ))}
-      </View>
-      <View style={styles.axisRow}>
-        <Text style={styles.axisText}>{formatShortDay(days[0]?.loggedOn ?? '')}</Text>
-        <Text style={styles.axisText}>
-          {formatShortDay(days[days.length - 1]?.loggedOn ?? '')}
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-/** The weight line. Normalised to its own min/max so small changes stay visible. */
-function WeightLine({
-  points,
-  color,
-  styles,
-}: {
-  points: number[];
-  color: string;
-  styles: ReturnType<typeof makeStyles>;
-}) {
-  const height = 120;
-  const width = 300;
-
-  if (points.length < 2) {
-    return (
-      <View style={[styles.lineChart, { height }]}>
-        <Text style={styles.axisText}>Butuh minimal dua penimbangan.</Text>
-      </View>
-    );
-  }
-
-  const min = Math.min(...points);
-  const max = Math.max(...points);
-  // A flat series would divide by zero; 1 kg of headroom keeps the line
-  // centred instead of pinning it to the top of the box.
-  const span = max - min || 1;
-
-  const coords = points.map((value, i) => {
-    const x = (i / (points.length - 1)) * width;
-    const y = height - 10 - ((value - min) / span) * (height - 20);
-    return { x, y };
-  });
-
-  return (
-    <View style={[styles.lineChart, { height }]}>
-      <Svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`}>
-        <Polyline
-          points={coords.map((c) => `${c.x},${c.y}`).join(' ')}
-          fill="none"
-          stroke={color}
-          strokeWidth={2.5}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        {coords.map((c, i) => (
-          <Circle key={i} cx={c.x} cy={c.y} r={3} fill={color} />
-        ))}
-      </Svg>
-    </View>
   );
 }
 
@@ -471,27 +511,6 @@ const makeStyles = (theme: Theme) =>
       borderRadius: radius.pill,
     },
     deltaText: { fontSize: 13, fontWeight: '700' },
-    chart: {
-      flexDirection: 'row',
-      alignItems: 'flex-end',
-      height: 130,
-      gap: 4,
-    },
-    barColumn: { flex: 1, height: '100%', justifyContent: 'flex-end' },
-    bar: { width: '100%', borderRadius: 4 },
-    targetLine: { position: 'absolute', left: 0, right: 0 },
-    targetLabel: {
-      color: theme.textDim,
-      fontSize: 11,
-      textAlign: 'right',
-      marginTop: 2,
-    },
-    lineChart: { marginTop: spacing.lg, justifyContent: 'center' },
-    axisRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      marginTop: 6,
-    },
     axisText: { color: theme.textDim, fontSize: 12 },
     tiles: {
       flexDirection: 'row',

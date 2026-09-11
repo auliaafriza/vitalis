@@ -16,6 +16,7 @@ import {
 import Link from 'next/link';
 import { useMemo } from 'react';
 import { DayNav } from '@/components/nav';
+import { WaterQuickAdd } from '@/components/water-quick-add';
 import {
   Card,
   ErrorNote,
@@ -23,10 +24,10 @@ import {
   ProgressRing,
   SectionTitle,
   Skeleton,
+  Spinner,
   StatTile,
 } from '@/components/ui';
 import {
-  useAddWater,
   useDaySummaries,
   useDaySummary,
   useFoodEntries,
@@ -36,7 +37,6 @@ import {
 } from '@/lib/hooks';
 import { useDay } from '@/lib/use-day';
 
-const QUICK_WATER = [200, 350, 500] as const;
 const MEAL_ORDER: readonly MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 const MEAL_EMOJI: Record<MealType, string> = {
   breakfast: '\u{1F963}',
@@ -56,7 +56,6 @@ export default function DashboardPage() {
 
   const window = useMemo(() => lastNDays(30, day.today), [day.today]);
   const { data: recent } = useDaySummaries(window[0] ?? day.today, day.today);
-  const addWater = useAddWater(day.selected);
 
   const streak = useMemo(
     () => currentStreak((recent ?? []).map((s) => s.loggedOn), day.today),
@@ -283,21 +282,8 @@ export default function DashboardPage() {
         >
           Air Minum
         </SectionTitle>
-        <div className="flex gap-2">
-          {QUICK_WATER.map((ml) => (
-            <button
-              key={ml}
-              type="button"
-              disabled={addWater.isPending}
-              onClick={() =>
-                addWater.mutate({ loggedOn: day.selected, amountMl: ml })
-              }
-              className="flex-1 rounded-xl border border-water/40 bg-water/10 py-3 text-sm font-medium text-water disabled:opacity-50"
-            >
-              +{ml} ml
-            </button>
-          ))}
-        </div>
+        <WaterQuickAdd day={day.selected} />
+
         <ProgressBar
           value={today.waterMl}
           max={targets.waterMl}

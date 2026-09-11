@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  bucketDays,
+  niceAxisBounds,
+  shouldSyncSteps,
+  totalStepsToday,
   bmi,
   bmiCategory,
   currentStreak,
@@ -229,5 +233,172 @@ describe('fillDays', () => {
     expect(filled[1]!.kcal).toBe(0);
     expect(filled[1]!.sleepMin).toBeNull();
     expect(filled[1]!.steps).toBeNull();
+  });
+});
+
+describe('totalStepsToday', () => {
+  it('adds the session count to the baseline', () => {
+    expect(totalStepsToday(3200, 480)).toBe(3680);
+  });
+
+  it('takes the session value as-is, never as a running sum', () => {
+    // The Android bug: watchStepCount reports 1, then 2, then 3 — each one the
+    // cumulative total since subscribing. Adding them gave 1 + 3 + 6 = 10.
+    const events = [1, 2, 3];
+    const totals = events.map((s) => totalStepsToday(0, s));
+    expect(totals).toEqual([1, 2, 3]);
+  });
+
+  it('starts from zero when nothing was saved today', () => {
+    expect(totalStepsToday(0, 250)).toBe(250);
+  });
+
+  it('shrugs off nonsense from the sensor', () => {
+    expect(totalStepsToday(Number.NaN, 100)).toBe(100);
+    expect(totalStepsToday(500, Number.NaN)).toBe(500);
+    expect(totalStepsToday(-5, -5)).toBe(0);
+  });
+});
+
+describe('shouldSyncSteps', () => {
+  const fresh = { lastValue: 0, lastAt: 0 };
+
+  it('writes the first real count immediately', () => {
+    expect(shouldSyncSteps(120, fresh, 1_000)).toBe(true);
+  });
+
+  it('holds back a second write inside the interval', () => {
+    const state = { lastValue: 120, lastAt: 1_000 };
+    expect(shouldSyncSteps(140, state, 30_000)).toBe(false);
+  });
+
+  it('allows it once the interval has passed', () => {
+    const state = { lastValue: 120, lastAt: 1_000 };
+    expect(shouldSyncSteps(140, state, 61_001)).toBe(true);
+  });
+
+  it('forces a write when the app is going away', () => {
+    // The "steps do not sync" bug: the throttle dropped the last minute of a
+    // walk instead of deferring it, so closing the app lost it.
+    const state = { lastValue: 120, lastAt: 1_000 };
+    expect(shouldSyncSteps(140, state, 30_000, { force: true })).toBe(true);
+  });
+
+  it('never writes a count that has not moved', () => {
+    const state = { lastValue: 140, lastAt: 1_000 };
+    expect(shouldSyncSteps(140, state, 999_999, { force: true })).toBe(false);
+  });
+
+  it('refuses to overwrite a real total with a smaller one', () => {
+    // A phone reboot resets the hardware counter; the day's progress must not
+    // be reset with it.
+    const state = { lastValue: 8_000, lastAt: 1_000 };
+    expect(shouldSyncSteps(12, state, 999_999, { force: true })).toBe(false);
+  });
+
+  it('ignores zero and nonsense', () => {
+    expect(shouldSyncSteps(0, fresh, 1_000, { force: true })).toBe(false);
+    expect(shouldSyncSteps(Number.NaN, fresh, 1_000, { force: true })).toBe(false);
+  });
+});
+
+describe('niceAxisBounds', () => {
+  it('lands ticks on round numbers', () => {
+    const axis = niceAxisBounds([78.4, 79.7, 81.0]);
+    // Not 78.4 / 79.7 / 81.0 — a scale nobody can hold in their head.
+    expect(axis.ticks.every((t) => Number.isInteger(t * 2))).toBe(true);
+    expect(axis.min).toBeLessThanOrEqual(78.4);
+    expect(axis.max).toBeGreaterThanOrEqual(81);
+  });
+
+  it('starts bars at zero, because a bar length IS its value', () => {
+    const axis = niceAxisBounds([1900, 2100, 2050], { includeZero: true });
+    expect(axis.min).toBe(0);
+    expect(axis.max).toBeGreaterThanOrEqual(2100);
+  });
+
+  it('does NOT drag a weight axis down to zero', () => {
+    // The whole month of progress lives between 78 and 81; an axis from 0
+    // would flatten it into a horizontal line.
+    const axis = niceAxisBounds([78.2, 80.9]);
+    expect(axis.min).toBeGreaterThan(70);
+  });
+
+  it('gives a flat series a range instead of dividing by zero', () => {
+    const axis = niceAxisBounds([70, 70, 70]);
+    expect(axis.max).toBeGreaterThan(axis.min);
+    expect(Number.isFinite(axis.min)).toBe(true);
+  });
+
+  it('never prints a floating-point artefact as an axis label', () => {
+    // Repeated addition of 2.5 drifts to 7.500000000000001 without rounding.
+    const axis = niceAxisBounds([0, 10], { includeZero: true });
+    for (const tick of axis.ticks) {
+      expect(String(tick).length).toBeLessThan(8);
+    }
+  });
+
+  it('survives an empty series', () => {
+    const axis = niceAxisBounds([]);
+    expect(axis.ticks.length).toBeGreaterThan(0);
+    expect(axis.max).toBeGreaterThan(axis.min);
+  });
+
+  it('covers every value it was given', () => {
+    const values = [3, 17, 42, 8];
+    const axis = niceAxisBounds(values, { includeZero: true });
+    for (const v of values) {
+      expect(v).toBeGreaterThanOrEqual(axis.min);
+      expect(v).toBeLessThanOrEqual(axis.max);
+    }
+  });
+});
+
+describe('bucketDays', () => {
+  const day = (n: number) => `2026-03-${String(n).padStart(2, '0')}`;
+  const series = (n: number, value: (i: number) => number | null) =>
+    Array.from({ length: n }, (_, i) => ({ day: day(i + 1), value: value(i) }));
+
+  it('leaves a short series alone', () => {
+    const buckets = bucketDays(series(7, () => 2000), 14);
+    expect(buckets).toHaveLength(7);
+    expect(buckets[0]!.from).toBe(buckets[0]!.to);
+  });
+
+  it('groups a long series down to the cap', () => {
+    // A year on a phone is 365 bars — under a pixel each. Not a chart.
+    const buckets = bucketDays(series(28, () => 2000), 14);
+    expect(buckets.length).toBeLessThanOrEqual(14);
+    expect(buckets[0]!.from).not.toBe(buckets[0]!.to);
+  });
+
+  it('averages over the days that have data, not over the calendar', () => {
+    // One logged day of 2100 in a week is a 2100 average, not 300.
+    const buckets = bucketDays(
+      series(7, (i) => (i === 0 ? 2100 : null)),
+      1,
+    );
+    expect(buckets[0]!.value).toBe(2100);
+    expect(buckets[0]!.samples).toBe(1);
+  });
+
+  it('keeps an empty bucket null rather than inventing a zero', () => {
+    const buckets = bucketDays(series(7, () => null), 1);
+    expect(buckets[0]!.value).toBeNull();
+    expect(buckets[0]!.samples).toBe(0);
+  });
+
+  it('spans the whole range without dropping or duplicating a day', () => {
+    const input = series(30, (i) => i);
+    const buckets = bucketDays(input, 7);
+    const covered = buckets.flatMap((b) => b.items);
+    expect(covered).toHaveLength(30);
+    expect(buckets[0]!.from).toBe(day(1));
+    expect(buckets[buckets.length - 1]!.to).toBe(day(30));
+  });
+
+  it('handles an empty series and rejects a nonsense cap', () => {
+    expect(bucketDays([], 10)).toEqual([]);
+    expect(() => bucketDays(series(3, () => 1), 0)).toThrow(RangeError);
   });
 });

@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import {
+  recomputeTargets,
   saveTargets,
   setTutorialSeen,
   signOutEverywhere,
@@ -14,6 +15,7 @@ import {
   credentialsSchema,
   formatVolume,
   GOAL_LABEL,
+  onboardingSchema,
   targetsSchema,
   type ActivityLevel,
   type Goal,
@@ -30,6 +32,8 @@ import {
   inputClass,
   PasswordInput,
   SectionTitle,
+  Skeleton,
+  Spinner,
 } from '@/components/ui';
 import { ThemePicker } from '@/components/theme-picker';
 import { qk, useProfile, useTargets } from '@/lib/hooks';
@@ -41,9 +45,9 @@ const GOALS: Goal[] = ['lose', 'maintain', 'gain'];
 export default function SettingsPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { data: profile } = useProfile();
+  const { data: profile, isLoading: profileLoading } = useProfile();
   const day = useDay(profile?.timezone);
-  const { data: targets } = useTargets(day.today);
+  const { data: targets, isLoading: targetsLoading } = useTargets(day.today);
 
   const [form, setForm] = useState({
     kcal: '',
@@ -72,16 +76,41 @@ export default function SettingsPage() {
     });
   }, [targets]);
 
+  /**
+   * A change to any of these is a change to the plan.
+   *
+   * `day.today` is what turns that from a label change into a recalculation:
+   * passing it lets updateProfile derive a fresh set of targets from the new
+   * goal, height or activity level. Without it, tapping "Naikkan massa otot"
+   * used to highlight a button and leave every number on the dashboard exactly
+   * where it was.
+   */
+  /**
+   * Which option is currently being written, so the chip the user pressed can
+   * say so.
+   *
+   * Choosing a goal now triggers a profile update *and* a full target
+   * recalculation — two round trips. Before this, the button did not even
+   * change colour until both came back, which on a slow connection is several
+   * seconds of a screen that looks like it ignored the tap.
+   */
+  const [pendingChoice, setPendingChoice] = useState<string | null>(null);
+
   async function handleProfileChange(patch: {
     activityLevel?: ActivityLevel;
     goal?: Goal;
+    heightCm?: number;
   }) {
     setError(null);
+    setPendingChoice(patch.goal ?? patch.activityLevel ?? 'height');
     try {
-      await updateProfile(getBrowserClient(), patch);
+      await updateProfile(getBrowserClient(), patch, day.today);
       await queryClient.invalidateQueries({ queryKey: qk.profile });
+      await queryClient.invalidateQueries({ queryKey: ['targets'] });
     } catch (err) {
       setError(err);
+    } finally {
+      setPendingChoice(null);
     }
   }
 
@@ -98,13 +127,82 @@ export default function SettingsPage() {
     setStatus('saving');
     try {
       // A new target version starts today; history keeps its old goals.
-      await saveTargets(getBrowserClient(), parsed.data, day.today);
+      // 'manual' marks these as the user's own numbers, so the automatic
+      // recalculation that follows a weigh-in leaves them alone.
+      await saveTargets(getBrowserClient(), parsed.data, day.today, 'manual');
       await queryClient.invalidateQueries({ queryKey: ['targets'] });
       setStatus('saved');
       setTimeout(() => setStatus('idle'), 2000);
     } catch (err) {
       setError(err);
       setStatus('idle');
+    }
+  }
+
+  /**
+   * The way back from a manual target.
+   *
+   * Once someone types their own numbers the app stops touching them, which
+   * is right — but it would be a trap without a door. This is the door.
+   */
+  const [recomputing, setRecomputing] = useState(false);
+
+  async function handleRecompute() {
+    setError(null);
+    setRecomputing(true);
+    try {
+      const next = await recomputeTargets(getBrowserClient(), day.today, {
+        force: true,
+      });
+      if (!next) {
+        setError(
+          new Error(
+            'Belum bisa dihitung: lengkapi tanggal lahir, jenis kelamin dan tinggi, lalu catat berat badanmu minimal sekali.',
+          ),
+        );
+        return;
+      }
+      await queryClient.invalidateQueries({ queryKey: ['targets'] });
+      setStatus('saved');
+      setTimeout(() => setStatus('idle'), 2000);
+    } catch (err) {
+      setError(err);
+    } finally {
+      setRecomputing(false);
+    }
+  }
+
+  /**
+   * Height, editable after setup.
+   *
+   * It was write-once before, which meant a typo during onboarding quietly
+   * skewed the BMR — and therefore every calorie target — for good.
+   */
+  const [heightDraft, setHeightDraft] = useState('');
+  const [heightBusy, setHeightBusy] = useState(false);
+  const [heightSaved, setHeightSaved] = useState(false);
+  const [heightError, setHeightError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (profile?.heightCm != null) setHeightDraft(String(profile.heightCm));
+  }, [profile?.heightCm]);
+
+  async function saveHeight() {
+    setHeightError(null);
+    const parsed = onboardingSchema.shape.heightCm.safeParse(heightDraft);
+    if (!parsed.success) {
+      setHeightError(parsed.error.issues[0]?.message ?? 'Tinggi tidak valid');
+      return;
+    }
+    if (parsed.data === profile?.heightCm) return;
+
+    setHeightBusy(true);
+    try {
+      await handleProfileChange({ heightCm: parsed.data });
+      setHeightSaved(true);
+      setTimeout(() => setHeightSaved(false), 2000);
+    } finally {
+      setHeightBusy(false);
     }
   }
 
@@ -217,6 +315,19 @@ export default function SettingsPage() {
     }
   }
 
+  if (profileLoading || targetsLoading) {
+    return (
+      <div className="space-y-5">
+        <Skeleton className="h-7 w-52" />
+        <Skeleton className="h-28" />
+        <Skeleton className="h-56" />
+        <Skeleton className="h-36" />
+        <Skeleton className="h-44" />
+        <Skeleton className="h-80" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
       <h1 className="text-xl font-semibold">Profil & target</h1>
@@ -250,7 +361,8 @@ export default function SettingsPage() {
           <Button
             type="submit"
             variant="ghost"
-            disabled={nameBusy || nameDraft.trim() === (profile?.fullName ?? '')}
+            busy={nameBusy}
+            disabled={nameDraft.trim() === (profile?.fullName ?? '')}
           >
             Simpan
           </Button>
@@ -287,7 +399,8 @@ export default function SettingsPage() {
           <Button
             type="submit"
             variant="ghost"
-            disabled={passwordBusy || password.length === 0}
+            busy={passwordBusy}
+            disabled={password.length === 0}
             className="w-full"
           >
             {passwordBusy ? 'Menyimpan…' : 'Ganti kata sandi'}
@@ -325,6 +438,50 @@ export default function SettingsPage() {
       </Card>
 
       <Card>
+        <SectionTitle
+          action={
+            heightSaved ? (
+              <span className="text-xs text-brand-400">Tersimpan</span>
+            ) : undefined
+          }
+        >
+          Tinggi badan
+        </SectionTitle>
+        <form
+          className="flex gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void saveHeight();
+          }}
+        >
+          <input
+            type="number"
+            inputMode="numeric"
+            value={heightDraft}
+            onChange={(event) => setHeightDraft(event.target.value)}
+            className={inputClass}
+            placeholder="cm"
+            aria-label="Tinggi badan dalam sentimeter"
+          />
+          <Button
+            type="submit"
+            variant="ghost"
+            busy={heightBusy}
+            disabled={heightDraft === String(profile?.heightCm ?? '')}
+          >
+            Simpan
+          </Button>
+        </form>
+        {heightError != null && (
+          <p className="mt-2 text-xs text-red-400">{heightError}</p>
+        )}
+        <p className="mt-2 text-xs text-ink-500">
+          Tinggi ikut menentukan kebutuhan kalori dasarmu, jadi mengubahnya di
+          sini langsung menghitung ulang target hari ini.
+        </p>
+      </Card>
+
+      <Card>
         <SectionTitle>Tingkat aktivitas</SectionTitle>
         <div className="space-y-2">
           {ACTIVITY_LEVELS.map((level) => (
@@ -333,13 +490,16 @@ export default function SettingsPage() {
               type="button"
               onClick={() => handleProfileChange({ activityLevel: level })}
               aria-pressed={profile?.activityLevel === level}
-              className={`w-full rounded-xl border px-3 py-2.5 text-left text-sm ${
+              aria-busy={pendingChoice === level || undefined}
+              disabled={pendingChoice !== null}
+              className={`flex w-full items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left text-sm disabled:opacity-60 ${
                 profile?.activityLevel === level
                   ? 'border-brand-500 bg-brand-500/10 text-brand-400'
                   : 'border-ink-700 text-ink-300'
               }`}
             >
               {ACTIVITY_LABEL[level]}
+              {pendingChoice === level ? <Spinner className="h-4 w-4" /> : null}
             </button>
           ))}
         </div>
@@ -354,13 +514,19 @@ export default function SettingsPage() {
               type="button"
               onClick={() => handleProfileChange({ goal })}
               aria-pressed={profile?.goal === goal}
-              className={`rounded-xl border px-2 py-3 text-xs ${
+              aria-busy={pendingChoice === goal || undefined}
+              disabled={pendingChoice !== null}
+              className={`inline-flex items-center justify-center gap-1.5 rounded-xl border px-2 py-3 text-xs disabled:opacity-60 ${
                 profile?.goal === goal
                   ? 'border-brand-500 bg-brand-500/10 text-brand-400'
                   : 'border-ink-700 text-ink-300'
               }`}
             >
-              {GOAL_LABEL[goal]}
+              {pendingChoice === goal ? (
+                <Spinner className="h-3.5 w-3.5" />
+              ) : (
+                GOAL_LABEL[goal]
+              )}
             </button>
           ))}
         </div>
@@ -431,10 +597,28 @@ export default function SettingsPage() {
 
           {error != null && <ErrorNote error={error} />}
 
-          <Button type="submit" disabled={status === 'saving'} className="w-full">
+          <Button type="submit" busy={status === 'saving'} className="w-full">
             {status === 'saving' ? 'Menyimpan…' : 'Simpan target'}
           </Button>
         </form>
+
+        <div className="mt-4 border-t border-ink-800 pt-4">
+          <p className="text-xs text-ink-500">
+            Kalau kamu belum pernah mengisi angka di atas, target ini menyesuaikan
+            sendiri setiap kali berat badan, tujuan, tinggi atau tingkat aktivitasmu
+            berubah. Begitu kamu menyimpan angkamu sendiri, aplikasi berhenti
+            mengubahnya — tombol di bawah mengembalikannya ke perhitungan otomatis.
+          </p>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => void handleRecompute()}
+            busy={recomputing}
+            className="mt-3 w-full"
+          >
+            {recomputing ? 'Menghitung…' : 'Hitung ulang otomatis'}
+          </Button>
+        </div>
       </Card>
 
       <Button

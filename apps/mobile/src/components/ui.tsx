@@ -1,6 +1,8 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
   Modal,
   Pressable,
   StyleSheet,
@@ -480,6 +482,122 @@ export function ErrorNote({ error }: { error: unknown }) {
   );
 }
 
+/**
+ * A grey block standing in for content that has not arrived yet.
+ *
+ * The phone had nothing like this: every screen rendered its final layout
+ * immediately with zeros and empty lists in it, then snapped to the real
+ * numbers when Supabase answered. On a good connection that is a flicker; on
+ * a bad one it is a dashboard that confidently says you have eaten 0 kcal and
+ * an empty food list that reads as "your entries are gone".
+ *
+ * A skeleton says the honest thing instead — "this is coming" — and it says it
+ * in the shape of what is coming, so the layout does not jump when it lands.
+ *
+ * The pulse uses the native driver so it keeps animating on the UI thread
+ * while JavaScript is busy parsing the response that ends it.
+ */
+export function Skeleton({
+  height = 16,
+  width,
+  radius: r = radius.md,
+  style,
+}: {
+  height?: number;
+  width?: number | `${number}%`;
+  radius?: number;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { theme } = useTheme();
+  const pulse = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 700,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0,
+          duration: 700,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
+
+  return (
+    <Animated.View
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={[
+        {
+          height,
+          width: width ?? '100%',
+          borderRadius: r,
+          backgroundColor: theme.border,
+          opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.45, 0.9] }),
+        },
+        style,
+      ]}
+    />
+  );
+}
+
+/**
+ * A card-shaped skeleton: a title line and a few body lines.
+ *
+ * Most loading states on this app are "a Card whose contents are not here
+ * yet", so that shape is worth having once rather than rebuilt per screen.
+ */
+export function SkeletonCard({
+  lines = 3,
+  title = true,
+}: {
+  lines?: number;
+  title?: boolean;
+}) {
+  return (
+    <Card>
+      {title ? <Skeleton height={14} width="45%" /> : null}
+      <View style={{ gap: spacing.sm, marginTop: title ? spacing.md : 0 }}>
+        {Array.from({ length: lines }).map((_, i) => (
+          <Skeleton
+            key={i}
+            height={12}
+            // The last line stops short, the way a real paragraph does.
+            width={i === lines - 1 ? '60%' : '100%'}
+          />
+        ))}
+      </View>
+    </Card>
+  );
+}
+
+/**
+ * "Something is loading, but the screen is already drawn."
+ *
+ * For a refresh of data that is already visible — switching to another day, a
+ * background refetch — where a skeleton would be wrong because it would blank
+ * out content the user can still read.
+ */
+export function InlineLoading({ label = 'Memuat…' }: { label?: string }) {
+  const { theme } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+  return (
+    <View accessibilityRole="progressbar" style={styles.inlineLoading}>
+      <ActivityIndicator size="small" color={theme.textDim} />
+      <Text style={styles.inlineLoadingText}>{label}</Text>
+    </View>
+  );
+}
+
 const makeStyles = (theme: Theme) =>
   StyleSheet.create({
     card: {
@@ -627,4 +745,10 @@ const makeStyles = (theme: Theme) =>
       padding: spacing.md,
     },
     errorText: { color: theme.danger, fontSize: 14 },
+    inlineLoading: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+    },
+    inlineLoadingText: { color: theme.textDim, fontSize: 13 },
   });

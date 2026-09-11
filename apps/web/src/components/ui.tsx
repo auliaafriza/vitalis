@@ -42,16 +42,29 @@ export function SectionTitle({
 type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: 'primary' | 'ghost' | 'danger';
   size?: 'sm' | 'md';
+  /**
+   * Work is in flight for this button.
+   *
+   * Disabling alone is not feedback. A button that only dims looks broken:
+   * the user pressed it, nothing visibly happened, and on a slow connection
+   * the natural conclusion is to press it again. `busy` adds a spinner in
+   * place of the icon, keeps the label so the button does not change width
+   * mid-request, and blocks the second press.
+   */
+  busy?: boolean;
 };
 
 export function Button({
   variant = 'primary',
   size = 'md',
   className = '',
+  busy = false,
+  disabled,
+  children,
   ...props
 }: ButtonProps) {
   const base =
-    'inline-flex items-center justify-center gap-2 rounded-xl font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50';
+    'relative inline-flex items-center justify-center gap-2 rounded-xl font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50';
   const sizes = { sm: 'px-3 py-1.5 text-sm', md: 'px-4 py-2.5 text-sm' };
   const variants = {
     primary: 'bg-brand-500 text-ink-950 hover:bg-brand-400',
@@ -61,8 +74,64 @@ export function Button({
   return (
     <button
       className={`${base} ${sizes[size]} ${variants[variant]} ${className}`}
+      disabled={disabled || busy}
+      aria-busy={busy || undefined}
       {...props}
-    />
+    >
+      {busy ? <Spinner /> : null}
+      {children}
+    </button>
+  );
+}
+
+/**
+ * The one spinner in the app.
+ *
+ * `currentColor` rather than a fixed shade, so it works on the brand button,
+ * the ghost button and the red one without three variants of itself.
+ */
+export function Spinner({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg
+      className={`animate-spin ${className}`}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="9"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        className="opacity-25"
+      />
+      <path
+        d="M21 12a9 9 0 0 0-9-9"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+/**
+ * "Something is loading, but the screen is already drawn."
+ *
+ * For a refresh of data that is already on screen — switching to another day,
+ * a background refetch — where a skeleton would be wrong because it would
+ * blank out content the user can still read.
+ */
+export function InlineLoading({ label = 'Memuat…' }: { label?: string }) {
+  return (
+    <span
+      role="status"
+      className="inline-flex items-center gap-2 text-xs text-ink-500"
+    >
+      <Spinner className="h-3.5 w-3.5" />
+      {label}
+    </span>
   );
 }
 

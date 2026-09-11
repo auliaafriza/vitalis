@@ -9,6 +9,7 @@ import {
 } from "@calorya/core";
 import { useState } from "react";
 import {
+  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,9 +18,15 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Button, Card, ErrorNote, ProgressBar } from "../../src/components/ui";
 import {
-  useAddWater,
+  Button,
+  Card,
+  ErrorNote,
+  ProgressBar,
+  SkeletonCard,
+} from "../../src/components/ui";
+import { WaterQuickAdd } from "../../src/components/water-quick-add";
+import {
   useDaySummary,
   useDeleteWater,
   useWaterEntries,
@@ -37,8 +44,6 @@ import {
   type Theme,
 } from "../../src/lib/theme";
 
-const QUICK_WATER = [150, 250, 350, 500] as const;
-
 export default function HealthScreen() {
   const { theme } = useTheme();
   const styles = useThemedStyles(makeStyles);
@@ -49,10 +54,9 @@ export default function HealthScreen() {
     "Asia/Jakarta";
   const day = todayKey(timezone);
 
-  const { data: targets } = useTargets(day);
-  const { data: summary } = useDaySummary(day);
+  const { data: targets, isLoading: targetsLoading } = useTargets(day);
+  const { data: summary, isLoading: summaryLoading } = useDaySummary(day);
 
-  const addWater = useAddWater(day);
   const deleteWater = useDeleteWater(day);
   const { data: waterEntries } = useWaterEntries(day);
   const saveWeight = useSaveWeight(day);
@@ -69,6 +73,29 @@ export default function HealthScreen() {
   const bmiValue = showBmi ? bmi(weightValue, profile.heightCm!) : null;
 
   const waterTotal = summary?.waterMl ?? 0;
+
+  /*
+   * Nothing has arrived yet.
+   *
+   * Without this the screen renders "0 ml / 2000 ml" and an empty progress
+   * bar while the day's totals are still in flight — which is not a neutral
+   * placeholder, it is the app telling someone who drank two litres that they
+   * have drunk nothing, and inviting them to log it twice.
+   */
+  const firstLoad = targetsLoading || summaryLoading;
+
+  if (firstLoad) {
+    return (
+      <SafeAreaView edges={["top"]} style={styles.screen}>
+        <ScrollView contentContainerStyle={styles.content}>
+          <SkeletonCard lines={3} />
+          <SkeletonCard lines={2} />
+          <SkeletonCard lines={2} />
+          <SkeletonCard lines={2} />
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView edges={["top"]} style={styles.screen}>
@@ -90,19 +117,9 @@ export default function HealthScreen() {
             color={theme.water}
             label="Progres minum air"
           />
-          <View style={styles.row}>
-            {QUICK_WATER.map((ml) => (
-              <Button
-                key={ml}
-                label={`+${ml}`}
-                variant="ghost"
-                disabled={addWater.isPending}
-                onPress={() => addWater.mutate({ loggedOn: day, amountMl: ml })}
-                style={{ flex: 1 }}
-              />
-            ))}
+          <View style={{ marginTop: spacing.md }}>
+            <WaterQuickAdd day={day} />
           </View>
-          {addWater.error != null && <ErrorNote error={addWater.error} />}
 
           {/*
           The individual glasses, so a mistaken tap can be taken back. Without
@@ -128,7 +145,11 @@ export default function HealthScreen() {
                     disabled={deleteWater.isPending}
                     hitSlop={8}
                   >
-                    <Text style={styles.remove}>×</Text>
+                    {deleteWater.isPending && deleteWater.variables === entry.id ? (
+                      <ActivityIndicator size="small" color={theme.textDim} />
+                    ) : (
+                      <Text style={styles.remove}>×</Text>
+                    )}
                   </Pressable>
                 </View>
               ))}
@@ -273,7 +294,6 @@ const makeStyles = (theme: Theme) =>
       marginBottom: spacing.sm,
     },
     meta: { color: theme.textDim, fontSize: 14, marginBottom: spacing.sm },
-    row: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.md },
     waterList: { marginTop: spacing.md, gap: 2 },
     waterRow: {
       flexDirection: "row",

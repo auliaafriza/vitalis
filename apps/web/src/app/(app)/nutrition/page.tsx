@@ -23,6 +23,7 @@ import {
   ProgressBar,
   SectionTitle,
   Skeleton,
+  Spinner,
 } from '@/components/ui';
 import {
   useCopyMeal,
@@ -179,6 +180,10 @@ export default function NutritionPage() {
                   <button
                     type="button"
                     disabled={copyMeal.isPending}
+                    aria-busy={
+                      (copyMeal.isPending && copyMeal.variables?.meal === group.meal) ||
+                      undefined
+                    }
                     onClick={() => {
                       setNothingToCopy(null);
                       copyMeal.mutate(
@@ -234,8 +239,12 @@ export default function NutritionPage() {
                           <button
                             type="submit"
                             disabled={updateQuantity.isPending}
-                            className="text-xs font-medium text-brand-400"
+                            aria-busy={updateQuantity.isPending || undefined}
+                            className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-400 disabled:opacity-60"
                           >
+                            {updateQuantity.isPending ? (
+                              <Spinner className="h-3 w-3" />
+                            ) : null}
                             Simpan
                           </button>
                           <button
@@ -269,9 +278,17 @@ export default function NutritionPage() {
                         aria-label={`Hapus ${entry.foodName}`}
                         onClick={() => deleteFood.mutate(entry.id)}
                         disabled={deleteFood.isPending}
-                        className="rounded-lg px-2 py-1 text-ink-500 hover:bg-red-500/10 hover:text-red-300"
+                        aria-busy={
+                          (deleteFood.isPending && deleteFood.variables === entry.id) ||
+                          undefined
+                        }
+                        className="inline-flex items-center rounded-lg px-2 py-1 text-ink-500 hover:bg-red-500/10 hover:text-red-300 disabled:opacity-60"
                       >
-                        ×
+                        {deleteFood.isPending && deleteFood.variables === entry.id ? (
+                          <Spinner className="h-3.5 w-3.5" />
+                        ) : (
+                          '×'
+                        )}
                       </button>
                     </div>
                   </li>

@@ -46,6 +46,8 @@ type TargetsRow = {
   water_ml: number;
   sleep_min: number;
   steps: number;
+  /** 'auto' = derived from the profile, 'manual' = typed by the user. */
+  source: 'auto' | 'manual';
   created_at: string;
 }
 
@@ -199,7 +201,7 @@ export interface Database {
       };
       targets: {
         Row: TargetsRow;
-        Insert: Insert<TargetsRow, 'id' | 'created_at' | 'effective_from' | 'fiber_g' | 'water_ml' | 'sleep_min' | 'steps'>;
+        Insert: Insert<TargetsRow, 'id' | 'created_at' | 'effective_from' | 'fiber_g' | 'water_ml' | 'sleep_min' | 'steps' | 'source'>;
         Update: Partial<TargetsRow>;
         Relationships: [];
       };

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ageYearsOn,
   addDays,
   daysInMonth,
   dateRange,
@@ -108,5 +109,32 @@ describe('helper pemilih tanggal', () => {
     expect(daysInMonth(2024, 2)).toBe(29);
     expect(daysInMonth(2000, 2)).toBe(29);
     expect(daysInMonth(1900, 2)).toBe(28);
+  });
+});
+
+describe('ageYearsOn', () => {
+  it('counts whole years', () => {
+    expect(ageYearsOn('1990-05-20', '2026-05-20')).toBe(36);
+    expect(ageYearsOn('1990-05-20', '2026-05-21')).toBe(36);
+  });
+
+  it('does not count a birthday that has not happened yet', () => {
+    expect(ageYearsOn('1990-05-20', '2026-05-19')).toBe(35);
+    expect(ageYearsOn('1990-12-31', '2026-01-01')).toBe(35);
+  });
+
+  it('is answered as of the day asked about, not today', () => {
+    // Recomputing an old day must not age the person by a birthday that
+    // happened after it — that would rewrite history.
+    expect(ageYearsOn('1990-06-15', '2020-01-01')).toBe(29);
+  });
+
+  it('handles a leap-day birthday without inventing a year', () => {
+    expect(ageYearsOn('2000-02-29', '2026-02-28')).toBe(25);
+    expect(ageYearsOn('2000-02-29', '2026-03-01')).toBe(26);
+  });
+
+  it('never returns a negative age for a mistyped year', () => {
+    expect(ageYearsOn('2090-01-01', '2026-01-01')).toBe(0);
   });
 });

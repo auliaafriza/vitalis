@@ -102,3 +102,27 @@ export function formatDuration(minutes: number): string {
 export function daysInMonth(year: number, month1: number): number {
   return new Date(Date.UTC(year, month1, 0)).getUTCDate();
 }
+
+/**
+ * Age in whole years on a given day.
+ *
+ * Derived from the two date keys rather than from `Date.now()`, because the
+ * targets for the 3rd of March must be the targets that were correct on the
+ * 3rd of March — recomputing an old day with today's age would rewrite
+ * history by a birthday. Both arguments are YYYY-MM-DD, so this is pure
+ * calendar arithmetic with no timezone in it at all.
+ *
+ * Returns 0 rather than a negative number for a birth date in the future,
+ * which only happens when someone mistypes the year during setup; the age
+ * then lands on the sensible end of the BMR formula instead of an absurd one.
+ */
+export function ageYearsOn(birthDate: DateKey, asOf: DateKey): number {
+  const [by, bm, bd] = birthDate.split('-').map(Number);
+  const [ay, am, ad] = asOf.split('-').map(Number);
+  if (!by || !bm || !bd || !ay || !am || !ad) return 0;
+
+  let age = ay - by;
+  // Birthday not reached yet this year.
+  if (am < bm || (am === bm && ad < bd)) age -= 1;
+  return Math.max(0, age);
+}

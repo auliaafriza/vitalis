@@ -1,6 +1,7 @@
 import { groupByMeal } from '@calorya/api';
 import {
   addDays,
+  relativeDayLabel,
   CATEGORY_EMOJI,
   CATEGORY_LABEL,
   CATEGORY_TINT,
@@ -37,6 +38,8 @@ import {
   ErrorNote,
   ProgressBar,
   Segmented,
+  Skeleton,
+  SkeletonCard,
 } from '../../src/components/ui';
 import {
   useAddFood,
@@ -51,6 +54,8 @@ import {
   useTargets,
 } from '../../src/lib/hooks';
 import { BarcodeScanner } from '../../src/components/barcode-scanner';
+import { DayNav } from '../../src/components/day-nav';
+import { FoodForm } from '../../src/components/food-form';
 import {
   radius,
   spacing,
@@ -67,14 +72,33 @@ const MEAL_OPTIONS = (['breakfast', 'lunch', 'dinner', 'snack'] as const).map((m
 export default function NutritionScreen() {
   const { theme } = useTheme();
   const styles = useThemedStyles(makeStyles);
-  const params = useLocalSearchParams<{ add?: string }>();
+  const params = useLocalSearchParams<{ add?: string; day?: string }>();
 
   const { data: profile } = useProfile();
   const timezone =
     profile?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'Asia/Jakarta';
-  const day = todayKey(timezone);
+  const today = todayKey(timezone);
 
-  const { data: entries, error } = useFoodEntries(day);
+  /*
+   * Which day is being logged — state, not a constant.
+   *
+   * This screen was pinned to `todayKey(timezone)`, so a meal you forgot to
+   * write down yesterday could never be added and a portion logged on Sunday
+   * could never be corrected on Monday. The web app has had a day navigator
+   * since the beginning; the phone, where people actually log their food, did
+   * not.
+   *
+   * `params.day` is how the dashboard hands over the day it was showing:
+   * stepping back to Monday there and tapping "Catat Makanan" should land on
+   * Monday, not bounce you to today.
+   */
+  const [day, setDay] = useState(() => {
+    const asked = typeof params.day === 'string' ? params.day : null;
+    // Never past today, and never a string that is not a date key.
+    return asked && /^\d{4}-\d{2}-\d{2}$/.test(asked) && asked <= today ? asked : today;
+  });
+
+  const { data: entries, error, isLoading: entriesLoading } = useFoodEntries(day);
   const { data: targets } = useTargets(day);
   const { data: recent } = useRecentFoods();
   const deleteFood = useDeleteFood(day);
@@ -105,9 +129,21 @@ export default function NutritionScreen() {
     if (params.add) searchRef.current?.focus();
   }, [params.add]);
 
+  /*
+   * Re-entering from the dashboard with a different day.
+   *
+   * expo-router keeps this screen mounted between tab switches, so the
+   * useState initialiser above runs once and never again. Without this the
+   * second visit from an older day would silently show the first visit's day.
+   */
+  useEffect(() => {
+    const asked = typeof params.day === 'string' ? params.day : null;
+    if (asked && /^\d{4}-\d{2}-\d{2}$/.test(asked) && asked <= today) setDay(asked);
+  }, [params.day, today]);
+
   const trimmed = query.trim();
   const browsing = trimmed.length > 0 || category !== null;
-  const { data: results } = useFoodSearch(trimmed, category);
+  const { data: results, isLoading: searching } = useFoodSearch(trimmed, category);
 
   /**
    * The scanner deliberately lives OUTSIDE any Modal.
@@ -121,6 +157,15 @@ export default function NutritionScreen() {
   const [scanning, setScanning] = useState(false);
   const [scanNote, setScanNote] = useState<string | null>(null);
   const resolve = useResolveBarcode();
+
+  /**
+   * The manual-entry screen, and the barcode it should remember.
+   *
+   * `null` means closed. Opening it from a failed scan carries the barcode
+   * through so the food is saved with it attached — the point being that the
+   * same package scans successfully next time.
+   */
+  const [creating, setCreating] = useState<{ barcode: string | null } | null>(null);
 
   function closeScanner() {
     setScanning(false);
@@ -138,7 +183,7 @@ export default function NutritionScreen() {
         }
         setScanNote(
           result.status === 'not_found'
-            ? 'Produk ini belum ada di database mana pun. Tambahkan manual saja.'
+            ? 'Produk ini belum ada di database mana pun. Ketuk “Tambah manual” di bawah untuk mengisinya sendiri.'
             : result.status === 'unusable'
               ? 'Produk ditemukan tapi data gizinya tidak lengkap.'
               : result.status === 'invalid_barcode'
@@ -150,6 +195,34 @@ export default function NutritionScreen() {
   }
 
   const groups = useMemo(() => groupByMeal(entries ?? []), [entries]);
+
+  /**
+   * Which meal the portion sheet should open on.
+   *
+   * On today, the clock is the best guess — open the app at lunchtime and you
+   * are almost certainly adding lunch. On a day you are filling in afterwards
+   * the clock means nothing, so the guess becomes the earliest meal still
+   * empty: someone backfilling Tuesday is usually working forward from
+   * breakfast, and the meals they already wrote down are the ones they do not
+   * need to add.
+   */
+  const defaultMeal = useMemo<MealType>(() => {
+    const hour = Number(
+      new Intl.DateTimeFormat('en-GB', {
+        hour: '2-digit',
+        hour12: false,
+        timeZone: timezone,
+      }).format(new Date()),
+    );
+    if (day === today) return mealForHour(hour);
+
+    const logged = new Set((entries ?? []).map((entry) => entry.meal));
+    return (
+      (['breakfast', 'lunch', 'dinner', 'snack'] as const).find(
+        (meal) => !logged.has(meal),
+      ) ?? 'snack'
+    );
+  }, [day, today, timezone, entries]);
   const totals = useMemo(() => sumNutrients(entries ?? []), [entries]);
   const split = useMemo(() => macroSplit(totals), [totals]);
 
@@ -160,6 +233,31 @@ export default function NutritionScreen() {
           <ErrorNote error={error} />
         </View>
       </SafeAreaView>
+    );
+  }
+
+  /*
+   * Manual entry, full-screen and ahead of the scanner in this ladder.
+   *
+   * Full-screen for the same reason the scanner is: it is a long form with a
+   * keyboard in front of it, and that does not belong in a sheet. Ahead of the
+   * scanner so opening it from a failed scan replaces the camera rather than
+   * stacking on top of it.
+   */
+  if (creating) {
+    return (
+      <FoodForm
+        initialName={trimmed}
+        barcode={creating.barcode}
+        onCancel={() => setCreating(null)}
+        onCreated={(food) => {
+          setCreating(null);
+          closeScanner();
+          // Straight into the portion sheet: they came here to log this, not
+          // to file a database entry and start over.
+          setChosen(food);
+        }}
+      />
     );
   }
 
@@ -178,6 +276,7 @@ export default function NutritionScreen() {
           onCancel={closeScanner}
           busy={resolve.isPending}
           note={scanNote}
+          onManualEntry={(barcode) => setCreating({ barcode })}
         />
       </SafeAreaView>
     );
@@ -193,6 +292,22 @@ export default function NutritionScreen() {
         <Text style={styles.subtitle}>
           Cari atau pindai makanan, langsung lihat informasi kalorinya.
         </Text>
+
+        {/*
+          Above the search box, not buried below it: which day you are writing
+          into has to be visible before you start typing, or you find out
+          afterwards.
+        */}
+        <DayNav selected={day} today={today} onChange={setDay} />
+
+        {day !== today ? (
+          <View style={styles.pastBanner}>
+            <Text style={styles.pastBannerText}>
+              Kamu sedang mengisi catatan {relativeDayLabel(day, today)}. Apa pun yang
+              ditambahkan atau diubah di sini masuk ke tanggal itu.
+            </Text>
+          </View>
+        ) : null}
 
         <View style={styles.searchRow}>
           <SearchIcon color={theme.textDim} size={18} weight={1.8} />
@@ -232,13 +347,37 @@ export default function NutritionScreen() {
               </Pressable>
             </View>
 
-            {(results ?? []).length === 0 ? (
+            {searching ? (
+              /*
+               * Not "Tidak ada hasil".
+               *
+               * While the query is in flight `results` is undefined, and the
+               * old code read that as an empty array — so every search told
+               * the user their food does not exist for as long as the network
+               * took, and only then found it. Saying nothing is worse than
+               * saying "searching"; saying the wrong thing is worse than both.
+               */
+              <View style={styles.list}>
+                <Skeleton height={62} />
+                <Skeleton height={62} />
+                <Skeleton height={62} />
+              </View>
+            ) : (results ?? []).length === 0 ? (
               <View style={{ gap: spacing.md }}>
                 <EmptyState
                   title="Tidak ada hasil"
-                  description="Kalau ini produk kemasan, barcode-nya biasanya lebih cepat ketemu daripada namanya."
+                  description="Kalau ini produk kemasan, barcode-nya biasanya lebih cepat ketemu daripada namanya. Kalau ini masakan rumah atau warung, tambahkan sendiri."
                 />
-                <Button label="Pindai barcode" onPress={() => setScanning(true)} />
+                <Button
+                  label="Tambah makanan sendiri"
+                  onPress={() => setCreating({ barcode: null })}
+                  icon={<PlusIcon color={theme.onBrand} size={18} weight={2.4} />}
+                />
+                <Button
+                  label="Pindai barcode"
+                  variant="ghost"
+                  onPress={() => setScanning(true)}
+                />
               </View>
             ) : (
               <View style={styles.list}>
@@ -295,6 +434,16 @@ export default function NutritionScreen() {
           </>
         )}
 
+        {entriesLoading ? (
+          /*
+           * The totals card, whole, rather than a dash inside it.
+           *
+           * A half-rendered card — "—" over an empty progress bar measured
+           * against a made-up 2000 kcal — looks like a broken card rather
+           * than a loading one.
+           */
+          <SkeletonCard lines={2} />
+        ) : (
         <Card>
           <View style={styles.totalRow}>
             <Text style={styles.total}>{formatKcal(totals.kcal)}</Text>
@@ -323,8 +472,21 @@ export default function NutritionScreen() {
             </>
           ) : null}
         </Card>
+        )}
 
-        {groups.map((group) => (
+        {entriesLoading ? (
+          /*
+           * Four "Belum ada catatan" cards is what this screen used to show
+           * while the day's entries were still loading — the app telling you
+           * it lost your food, once per meal, every time you opened the tab.
+           */
+          <>
+            <SkeletonCard lines={2} />
+            <SkeletonCard lines={2} />
+          </>
+        ) : null}
+
+        {entriesLoading ? null : groups.map((group) => (
           <View key={group.meal} style={{ gap: spacing.sm }}>
             <View style={styles.browseHeader}>
               <Text style={styles.sectionTitle}>
@@ -340,7 +502,7 @@ export default function NutritionScreen() {
                 title="Belum ada catatan"
                 description={
                   nothingToCopy === group.meal
-                    ? `Kemarin juga tidak ada catatan ${MEAL_LABEL[
+                    ? `${relativeDayLabel(yesterday, today)} juga tidak ada catatan ${MEAL_LABEL[
                         group.meal
                       ].toLowerCase()}.`
                     : `Tambahkan apa yang kamu makan saat ${MEAL_LABEL[
@@ -349,7 +511,9 @@ export default function NutritionScreen() {
                 }
                 action={
                   <Button
-                    label="⟲ Salin dari kemarin"
+                    // Named after the day it will actually copy from. Viewing
+                    // last Tuesday, "Salin dari kemarin" would copy Monday.
+                    label={`⟲ Salin dari ${relativeDayLabel(yesterday, today)}`}
                     variant="ghost"
                     loading={copyMeal.isPending}
                     onPress={() => {
@@ -448,7 +612,7 @@ export default function NutritionScreen() {
         {chosen ? (
           <PortionSheet
             day={day}
-            timezone={timezone}
+            defaultMeal={defaultMeal}
             food={chosen}
             onClose={() => setChosen(null)}
           />
@@ -554,12 +718,13 @@ function FoodRow({
  */
 function PortionSheet({
   day,
-  timezone,
+  defaultMeal,
   food,
   onClose,
 }: {
   day: string;
-  timezone: string;
+  /** Worked out by the screen, which knows both the clock and the day's gaps. */
+  defaultMeal: MealType;
   food: Food;
   onClose: () => void;
 }) {
@@ -567,17 +732,7 @@ function PortionSheet({
   const styles = useThemedStyles(makeStyles);
   const addFood = useAddFood(day);
 
-  const [meal, setMeal] = useState<MealType>(() =>
-    mealForHour(
-      Number(
-        new Intl.DateTimeFormat('en-GB', {
-          hour: '2-digit',
-          hour12: false,
-          timeZone: timezone,
-        }).format(new Date()),
-      ),
-    ),
-  );
+  const [meal, setMeal] = useState<MealType>(defaultMeal);
   const [amount, setAmount] = useState(String(defaultPortionG(food)));
 
   const quantity = Number(amount);
@@ -682,6 +837,12 @@ const makeStyles = (theme: Theme) =>
       paddingBottom: spacing.xxl * 2,
     },
     title: { color: theme.text, fontSize: 24, fontWeight: '700' },
+    pastBanner: {
+      backgroundColor: theme.brandSoft,
+      borderRadius: radius.md,
+      padding: spacing.md,
+    },
+    pastBannerText: { color: theme.brand, fontSize: 13, lineHeight: 18 },
     subtitle: { color: theme.textMuted, fontSize: 14, marginTop: -spacing.sm },
     searchRow: {
       flexDirection: 'row',

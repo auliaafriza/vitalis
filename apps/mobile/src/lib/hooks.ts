@@ -18,12 +18,16 @@ import {
   searchFoods,
   updateFoodEntryQuantity,
   upsertSleep,
+  createFood,
+  getSteps,
+  getWeightEntries,
   upsertSteps,
   upsertWeight,
 } from '@calorya/api';
 import type {
   FoodCategory,
   FoodEntryInput,
+  FoodInput,
   MealType,
   SleepEntryInput,
   StepEntryInput,
@@ -49,6 +53,8 @@ export const qk = {
   foodSearch: (q: string, category: FoodCategory | null) =>
     ['food-search', q, category] as const,
   recentFoods: ['recent-foods'] as const,
+  steps: (day: string) => ['steps', day] as const,
+  weights: (from: string, to: string) => ['weights', from, to] as const,
 };
 
 export function useProfile() {
@@ -152,8 +158,28 @@ function useDayInvalidator(day: string) {
     void client.invalidateQueries({ queryKey: ['summaries'] });
     void client.invalidateQueries({ queryKey: qk.foodEntries(day) });
     void client.invalidateQueries({ queryKey: qk.water(day) });
+    void client.invalidateQueries({ queryKey: qk.steps(day) });
+    void client.invalidateQueries({ queryKey: ['weights'] });
     void client.invalidateQueries({ queryKey: qk.recentFoods });
   };
+}
+
+/**
+ * Create a food that is not in the catalogue.
+ *
+ * Invalidates search and the recent list so the food the user just typed in is
+ * findable straight away — otherwise the very next search for it would come
+ * back empty again, which is exactly the dead end this feature exists to end.
+ */
+export function useCreateFood() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: FoodInput) => createFood(getClient(), input),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ['food-search'] });
+      void client.invalidateQueries({ queryKey: qk.recentFoods });
+    },
+  });
 }
 
 export function useResolveBarcode() {
@@ -236,6 +262,34 @@ export function useSaveSleep(day: string) {
   return useMutation({
     mutationFn: (input: SleepEntryInput) => upsertSleep(getClient(), input),
     onSuccess: invalidate,
+  });
+}
+
+/**
+ * Today's saved step count.
+ *
+ * The pedometer needs it as a baseline on Android, where the sensor cannot
+ * report anything from before the app was opened — see use-pedometer.ts.
+ */
+/**
+ * Weigh-ins across a range.
+ *
+ * The Progress screen used to read weight out of the day summaries instead,
+ * which gave it at most one value per day and no way to tell "did not weigh
+ * in" from "weighed the same". This is the same query the web app has always
+ * used, so both platforms now chart the same numbers.
+ */
+export function useWeights(from: string, to: string) {
+  return useQuery({
+    queryKey: qk.weights(from, to),
+    queryFn: () => getWeightEntries(getClient(), from, to),
+  });
+}
+
+export function useSteps(day: string) {
+  return useQuery({
+    queryKey: qk.steps(day),
+    queryFn: () => getSteps(getClient(), day),
   });
 }
 
